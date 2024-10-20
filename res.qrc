@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="icon">
+    <file>yish.ico</file>
+  </qresource>
+</RCC>
