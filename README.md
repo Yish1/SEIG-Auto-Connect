@@ -5,10 +5,10 @@
 
 > [!已知问题]
 > 开机自启无法生效
-> 
+> 需要您的账号可以在网页端登录
 
 > [!TIP]
-> 提示：打包参数：nuitka --standalone --lto=no --clang --msvc=latest --disable-ccache --windows-uac-admin --windows-console-mode=disable --enable-plugin=pyqt5,upx --upx-binary=E:\ctest\o\upx\upx.exe --output-dir=o --windows-icon-from-ico=picker.ico --nofollow-import-to=unittest main.py
+> 提示：打包参数：nuitka --standalone --lto=no --clang --msvc=latest --disable-ccache --windows-uac-admin --windows-console-mode=disable --enable-plugin=pyqt5,upx --upx-binary=E:\ctest\o\upx\upx.exe --output-dir=o --windows-icon-from-ico=picker.ico --nofollow-import-to=unittest main.py，打包完后需要将仓库中的Pyqt5、ddddocr文件夹覆盖进去，(因为UPX完Pyqt5会损坏，ddddocr没被打包进去)
 
 ## 使用方式
 
