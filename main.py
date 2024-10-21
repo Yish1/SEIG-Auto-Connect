@@ -21,8 +21,6 @@ from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject
 from ui import Ui_MainWindow  # 导入ui文件
 from settings import Ui_sac_settings
 
-import shutil
-
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
@@ -157,8 +155,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             pass
         self.lineEdit.setText(username)
 
-
-
     def try_auto_connect(self):
         global retry_thread_started
         self.threadpool = QThreadPool()
@@ -175,35 +171,13 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def add_to_startup(self, mode=None):
         startup_folder = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
-        global app_path
-        #app_path =os.path.realpath(__file__) # 获取当前程序的完整路径
-        app_path =sys.executable # 获取当前程序的完整路径
-        print(app_path)
+        app_path = os.path.realpath(__file__)  # 获取当前程序的完整路径
         shortcut_path = os.path.join(startup_folder, 'SEIG_Auto_Connect.lnk')
-
-        # print(app_path)
-
-        def write_auto_start_bat():
-            global auto_start_file
-            auto_start_file=r'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\autostart.bat'
-            #print(a)
-            # print(fr'start /b {app_path}')
-
-            with open(auto_start_file, 'w', encoding='utf-8') as f:
-
-                f.write(fr'start /b {app_path}')
-
-
-        write_auto_start_bat()
-        os.remove(fr'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\config.ini')
-
-
-
 
         if mode == 1:
             # 删除开机自启项
             if os.path.exists(shortcut_path):
-                os.remove(auto_start_file)
+                os.remove(shortcut_path)
                 print("开机自启已关闭")
             else:
                 print("开机自启项不存在，无法删除。")
