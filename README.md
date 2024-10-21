@@ -33,7 +33,8 @@
 - [ ] None
       
 ## 下载链接
-> 最新版下载地址：[蓝奏云下载](https://yish.lanzouw.com/b038hjo8f) (密码：cmti)<br>
+> 最新版下载地址：[蓝奏云下载](https://yish.lanzn.com/b004hx44wb)
+密码:6cgi<br>
 > Setup.exe即安装包版，适用于在自己电脑上使用，SEIG虚空终端.exe为单文件版，便携<br>
 > 沉梦小站发布地址：[GO！](https://cmxz.top/ktdmq)
 >
