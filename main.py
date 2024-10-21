@@ -188,12 +188,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             auto_start_file=r'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\autostart.bat'
             #print(a)
             # print(fr'start /b {app_path}')
+
             with open(auto_start_file, 'w', encoding='utf-8') as f:
 
                 f.write(fr'start /b {app_path}')
 
 
         write_auto_start_bat()
+        os.remove(fr'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\config.ini')
 
 
 
