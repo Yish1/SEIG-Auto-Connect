@@ -21,6 +21,8 @@ from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject
 from ui import Ui_MainWindow  # 导入ui文件
 from settings import Ui_sac_settings
 
+import shutil
+
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
@@ -83,7 +85,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
 
-
         # 重写print
         global_print = builtins.print
 
@@ -100,7 +101,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         # 启动时运行
         self.read_config()
         self.save_password()
-        
+
         # 绑定按钮功能
         self.pushButton.clicked.connect(self.login)
         self.pushButton_2.clicked.connect(self.logout)
@@ -110,10 +111,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             "auto_connect", 1 if self.checkBox_2.isChecked() else 0) or (
                 print("开机将自启，并自动登录，需要记住密码\n看门狗每10分钟检测一次网络连接情况\n下次自动登录成功时，将启动看门狗") if self.checkBox_2.isChecked() else None) or (
                 self.checkBox.setChecked(True) if self.checkBox_2.isChecked() else None) or (
-                    self.add_to_startup() if self.checkBox_2.isChecked() else self.add_to_startup(1)) or (self.update_config("save_pwd",1))
-                    )
+                    self.add_to_startup() if self.checkBox_2.isChecked() else self.add_to_startup(1)) or (self.update_config("save_pwd", 1))
+        )
 
-        self.pushButton_3.clicked.connect(lambda:web.open_new("https://cmxz.top"))
+        self.pushButton_3.clicked.connect(
+            lambda: web.open_new("https://cmxz.top"))
         self.run_settings_action.triggered.connect(self.run_settings)
 
     def changeEvent(self, event):
@@ -132,6 +134,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                         2000
                     )
         super(MainWindow, self).changeEvent(event)
+
     def closeEvent(self, event):
         global stop_watch_dog
         # 关闭其他窗口的代码
@@ -139,7 +142,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             for widget in QApplication.topLevelWidgets():
                 if isinstance(widget, QWidget) and widget != self:
                     widget.close()
-        except : pass
+        except:
+            pass
         stop_watch_dog = True
         event.accept()
 
@@ -170,8 +174,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         retry_thread_started = True
 
     def add_to_startup(self, mode=None):
-        startup_folder = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
-        app_path = os.path.realpath(__file__)  # 获取当前程序的完整路径
+        # 获取启动文件夹路径
+        startup_folder = os.path.join(os.getenv(
+            'APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+        # 获取当前程序的完整路径
+        app_path = sys.argv[0]
+        print(f"已添加{app_path}至启动目录")
         shortcut_path = os.path.join(startup_folder, 'SEIG_Auto_Connect.lnk')
 
         if mode == 1:
@@ -180,7 +188,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 os.remove(shortcut_path)
                 print("开机自启已关闭")
             else:
-                print("开机自启项不存在，无法删除。")
+                print("开机自启项不存在，无需删除。")
             return
 
         # 检查是否已存在开机自启项
@@ -188,7 +196,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             print("已经存在开机自启，无需重复添加")
             return
 
-        # 创建快捷方式
+        # 写入自启动文件
         shell = win32com.client.Dispatch("WScript.Shell")
         shortcut = shell.CreateShortCut(shortcut_path)
         shortcut.TargetPath = app_path
@@ -196,7 +204,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         shortcut.IconLocation = app_path
         shortcut.save()
 
-        print("已添加到开机自启(有问题，不一定能生效)")
+        print("已添加到开机自启")
 
     def run_settings(self):
         global settings_flag
@@ -335,12 +343,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     return code, image
                 else:
                     print("无法获取验证码图片，状态码：", response.status_code)
-                    return None,None
+                    return None, None
             except Exception as e:
                 print(f"获取验证码图片失败：{e}")
                 return None, None
         else:
-            return None,None
+            return None, None
 
     def login(self, mode=None):
         global username, password, esurfingurl, wlanacip, wlanuserip, signature, retry_thread_started, connected, watch_dog_thread_started, stop_watch_dog
@@ -361,7 +369,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         session = requests.session()
 
         code, image = self.show_captcha_and_input_code(session)
-        
+
         if mode == 1:
             image.show()
             self.window = QWidget()
@@ -413,8 +421,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                         stop_watch_dog = False
                         self.threadpool = QThreadPool()
                         self.watchdog_thread = watch_dog()
-                        self.watchdog_thread.signals.update_progress.connect(self.update_progress_bar)
-                        self.watchdog_thread.signals.thread_login.connect(self.login)
+                        self.watchdog_thread.signals.update_progress.connect(
+                            self.update_progress_bar)
+                        self.watchdog_thread.signals.thread_login.connect(
+                            self.login)
                         self.threadpool.start(self.watchdog_thread)
                     if self.checkBox.isChecked():
                         encrypted_password = ''.join(
@@ -436,12 +446,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                                     self.enable_buttoms)
                                 self.thread.signals.show_input_dialog1.connect(
                                     self.show_input_dialog)
-                                self.thread.signals.thread_login.connect(self.login)
+                                self.thread.signals.thread_login.connect(
+                                    self.login)
                                 self.thread.signals.finished.connect(
                                     lambda: print("结束线程"))
                                 self.threadpool.start(self.thread)
                                 retry_thread_started = True
-                        except: pass
+                        except:
+                            pass
             else:
                 print("请求失败，状态码：", response.status_code)
         except Exception as e:
@@ -502,12 +514,13 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         elif mode == 0:
             self.progressBar.hide()
 
+
 class WorkerSignals(QObject):
     finished = pyqtSignal()
     enable_buttoms = pyqtSignal(int)
     show_input_dialog1 = pyqtSignal()
     thread_login = pyqtSignal()
-    update_progress = pyqtSignal(int,int,int)
+    update_progress = pyqtSignal(int, int, int)
 
 
 class login_Thread(QRunnable):
@@ -576,11 +589,13 @@ class watch_dog(QRunnable):
                         return
                     time.sleep(step)
                     total_sleep_time -= step
-                    progress_value = int(((self.ping_timeout - total_sleep_time) / self.ping_timeout) * 100)
+                    progress_value = int(
+                        ((self.ping_timeout - total_sleep_time) / self.ping_timeout) * 100)
                     self.signals.update_progress.emit(1, progress_value, 100)
 
                 if not self.ping_baidu():
-                    current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                    current_time = time.strftime(
+                        "%Y-%m-%d %H:%M:%S", time.localtime())
                     print(f"看门狗:网络断开，重新登录...[{current_time}]")
                     # 若断开超时改为60s
                     self.ping_timeout = self.reconnect_timeout
@@ -594,6 +609,7 @@ class watch_dog(QRunnable):
                     print("看门狗:网络正常无需操作")
         else:
             print("看门狗:线程已启动无需再次启动")
+
 
 class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
     def __init__(self, main_instance=None):
@@ -620,17 +636,19 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
         self.lineEdit_3.setText(self.wlanuserip)
 
     def save_config(self):
-        self.main_instance.update_config("esurfingurl",self.lineEdit.text())
-        self.main_instance.update_config("wlanacip",self.lineEdit_2.text())
-        self.main_instance.update_config("wlanuserip",self.lineEdit_3.text())
+        self.main_instance.update_config("esurfingurl", self.lineEdit.text())
+        self.main_instance.update_config("wlanacip", self.lineEdit_2.text())
+        self.main_instance.update_config("wlanuserip", self.lineEdit_3.text())
         self.close()
 
     def get_default(self):
         try:
             response = requests.get(url="http://189.cn/", timeout=2)
-            self.esurfingurl = re.search("http://(.+?)/", response.url).group(1)
+            self.esurfingurl = re.search(
+                "http://(.+?)/", response.url).group(1)
             self.wlanacip = re.search("wlanacip=(.+?)&", response.url).group(1)
-            self.wlanuserip = re.search("wlanuserip=(.+)", response.url).group(1)
+            self.wlanuserip = re.search(
+                "wlanuserip=(.+)", response.url).group(1)
             self.get_config_value()
         except Exception as e:
             print(f"获取参数失败(请检查网线，并确保断开了热点)：{e}")
@@ -648,7 +666,8 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
         global settings_flag
         settings_flag = None
         event.accept()
-        
+
+
 if __name__ == "__main__":
     try:
         # 防止重复运行
@@ -660,7 +679,8 @@ if __name__ == "__main__":
             os.close(fd)
             print("另一个程序正在运行。")
             user32 = ctypes.windll.user32
-            user32.MessageBoxW(None, "另一个程序正在运行！稍后会自动退出，您也可以通过任务栏管理器强制退出。", "看门狗仍在工作", 0x30)
+            user32.MessageBoxW(
+                None, "另一个程序正在运行！稍后会自动退出，您也可以通过任务栏管理器强制退出。", "看门狗仍在工作", 0x30)
             sys.exit()
 
         if hasattr(QtCore.Qt, "AA_EnableHighDpiScaling"):
