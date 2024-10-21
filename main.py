@@ -26,7 +26,7 @@ import shutil
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
-version = " Beta 1"
+version = " Beta 2"
 username = None
 password = None
 esurfingurl = None
