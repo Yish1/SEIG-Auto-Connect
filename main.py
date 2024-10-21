@@ -179,7 +179,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             'APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
         # 获取当前程序的完整路径
         app_path = sys.argv[0]
-        print(f"已添加{app_path}至启动目录")
         shortcut_path = os.path.join(startup_folder, 'SEIG_Auto_Connect.lnk')
 
         if mode == 1:
@@ -203,9 +202,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         shortcut.WorkingDirectory = os.path.dirname(app_path)
         shortcut.IconLocation = app_path
         shortcut.save()
-
-        print("已添加到开机自启")
-
+        print(f"已添加{app_path}至启动目录")
+        
     def run_settings(self):
         global settings_flag
         if settings_flag is None:
