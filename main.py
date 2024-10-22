@@ -669,7 +669,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
 if __name__ == "__main__":
     try:
         # 防止重复运行
-        lock_file = os.path.expanduser("~/.program_lock")
+        lock_file = os.path.expanduser("~/.Seig-auto-connect.lock")
         fd = os.open(lock_file, os.O_RDWR | os.O_CREAT)
         try:
             msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
