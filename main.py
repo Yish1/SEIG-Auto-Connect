@@ -157,20 +157,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             pass
         self.lineEdit.setText(username)
 
-    def try_auto_connect(self):
-        global retry_thread_started
-        self.threadpool = QThreadPool()
-        self.auto_thread = login_Thread(5)
-        self.auto_thread.signals.enable_buttoms.connect(
-            self.enable_buttoms)
-        self.auto_thread.signals.show_input_dialog1.connect(
-            self.show_input_dialog)
-        self.auto_thread.signals.thread_login.connect(self.login)
-        self.auto_thread.signals.finished.connect(
-            lambda: print("结束线程"))
-        self.threadpool.start(self.auto_thread)
-        retry_thread_started = True
-
     def add_to_startup(self, mode=None):
         # 获取启动文件夹路径
         startup_folder = os.path.join(os.getenv(
@@ -190,8 +176,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         # 检查是否已存在开机自启项
         if os.path.exists(shortcut_path):
-            print("已经存在开机自启，无需重复添加")
-            return
+            pass
+        else:
+            print(f"已添加{app_path}至启动目录")
 
         # 写入自启动文件
         shell = win32com.client.Dispatch("WScript.Shell")
@@ -200,7 +187,21 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         shortcut.WorkingDirectory = os.path.dirname(app_path)
         shortcut.IconLocation = app_path
         shortcut.save()
-        print(f"已添加{app_path}至启动目录")
+
+    def try_auto_connect(self):
+        global retry_thread_started
+        self.threadpool = QThreadPool()
+        self.auto_thread = login_Thread(5)
+        self.auto_thread.signals.enable_buttoms.connect(
+            self.enable_buttoms)
+        self.auto_thread.signals.show_input_dialog1.connect(
+            self.show_input_dialog)
+        self.auto_thread.signals.thread_login.connect(self.login)
+        self.auto_thread.signals.finished.connect(
+            lambda: print("结束线程"))
+        self.threadpool.start(self.auto_thread)
+        retry_thread_started = True
+        self.add_to_startup()
 
     def run_settings(self):
         global settings_flag
