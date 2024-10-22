@@ -4,12 +4,11 @@
 </div>
 
 > [!WARNING]
-> 开机自启无法生效<br>
 > 需要您的账号可以在网页端登录
 
 > [!TIP]
 > 原则上适用于所有广东的网页版esurfing<br>
-> 提示：打包参数：nuitka --standalone --lto=no --clang --msvc=latest --disable-ccache --windows-uac-admin --windows-console-mode=disable --enable-plugin=pyqt5,upx --upx-binary=E:\ctest\o\upx\upx.exe --output-dir=o --windows-icon-from-ico=picker.ico --nofollow-import-to=unittest main.py<br>打包完后需要将仓库中的Pyqt5、ddddocr文件夹覆盖进去，(因为UPX完Pyqt5会损坏，ddddocr没被打包进去)
+> 提示：打包参数：nuitka --standalone --lto=no --clang --msvc=latest --disable-ccache --windows-console-mode=disable --enable-plugin=pyqt5,upx --upx-binary=E:\ctest\o\upx\upx.exe --output-dir=o --windows-icon-from-ico=picker.ico --nofollow-import-to=unittest main.py<br>打包完后需要将仓库中的Pyqt5、ddddocr文件夹覆盖进去，(因为UPX完Pyqt5会损坏，ddddocr没被打包进去)
 ## 感谢
 > 验证码获取和自动获取登陆参数参考了前辈的代码[ESurfingPy-CLI](https://github.com/Pandaft/ESurfingPy-CLI)，自己原本搞得验证码一直过不了服务器
 
