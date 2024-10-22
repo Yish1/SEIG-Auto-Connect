@@ -21,12 +21,10 @@ from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject
 from ui import Ui_MainWindow  # 导入ui文件
 from settings import Ui_sac_settings
 
-import shutil
-
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
-version = " Beta 2"
+version = " Beta 3"
 username = None
 password = None
 esurfingurl = None
