@@ -203,7 +203,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         shortcut.IconLocation = app_path
         shortcut.save()
         print(f"已添加{app_path}至启动目录")
-        
+
     def run_settings(self):
         global settings_flag
         if settings_flag is None:
@@ -563,8 +563,11 @@ class watch_dog(QRunnable):
         self.reconnect_timeout = 60
 
     def ping_baidu(self):
-        response = os.system("ping -n 1 www.baidu.com > nul")
-        return response == 0
+        try:
+            response = requests.head("http://www.baidu.com", timeout=2)
+            return response.status_code == 200
+        except:
+            return False
 
     def run(self):
         global watch_dog_thread_started
