@@ -24,7 +24,7 @@ from settings import Ui_sac_settings
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
-version = " Beta 3"
+version = " Beta 4"
 username = None
 password = None
 esurfingurl = None
@@ -89,7 +89,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         def print(*args, **kwargs):
             global_print(*args, **kwargs)
             text = " ".join(map(str, args))
-            self.listWidget.addItem(text)
+            try:
+                self.listWidget.addItem(text)
+            except:
+                pass
             try:
                 self.listWidget.setCurrentRow(self.listWidget.count() - 1)
             except:
@@ -455,7 +458,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 print("请求失败，状态码：", response.status_code)
         except Exception as e:
             print(f"登录请求失败，请先获取配置并确保配置正确：{e}")
+            connected = True
             self.run_settings()
+
 
     def logout(self):
         global stop_watch_dog
@@ -559,7 +564,7 @@ class watch_dog(QRunnable):
             self.signals.update_progress.emit(1, 0, 100)
         except:
             self.ping_timeout = 600
-        self.reconnect_timeout = 60
+        self.reconnect_timeout = 30
 
     def ping_baidu(self):
         try:
@@ -569,6 +574,7 @@ class watch_dog(QRunnable):
             return False
 
     def run(self):
+        # debugpy.breakpoint()
         global watch_dog_thread_started
         original_interval = self.ping_timeout
         if watch_dog_thread_started != True:
@@ -585,13 +591,19 @@ class watch_dog(QRunnable):
                     if stop_watch_dog:
                         print("看门狗:停止监测")
                         watch_dog_thread_started = False
-                        self.signals.update_progress.emit(0, 0, 0)
+                        try:
+                            self.signals.update_progress.emit(0, 0, 0)
+                        except:
+                            print("信号槽已被删除")
                         return
                     time.sleep(step)
                     total_sleep_time -= step
                     progress_value = int(
                         ((self.ping_timeout - total_sleep_time) / self.ping_timeout) * 100)
-                    self.signals.update_progress.emit(1, progress_value, 100)
+                    try:
+                        self.signals.update_progress.emit(1, progress_value, 100)
+                    except:
+                        print("信号槽已被删除")
 
                 if not self.ping_baidu():
                     current_time = time.strftime(

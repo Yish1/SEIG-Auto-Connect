@@ -14,12 +14,13 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_sac_settings(object):
     def setupUi(self, sac_settings):
         sac_settings.setObjectName("sac_settings")
-        sac_settings.resize(194, 266)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sac_settings.resize(211, 298)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(sac_settings.sizePolicy().hasHeightForWidth())
         sac_settings.setSizePolicy(sizePolicy)
+        sac_settings.setMinimumSize(QtCore.QSize(211, 298))
         self.gridLayout = QtWidgets.QGridLayout(sac_settings)
         self.gridLayout.setObjectName("gridLayout")
         self.frame = QtWidgets.QFrame(sac_settings)
@@ -52,6 +53,7 @@ class Ui_sac_settings(object):
         self.verticalLayout.addWidget(self.lineEdit_3)
         self.gridLayout.addWidget(self.frame, 0, 0, 1, 1)
         self.frame_2 = QtWidgets.QFrame(sac_settings)
+        self.frame_2.setMaximumSize(QtCore.QSize(16777215, 44))
         self.frame_2.setFrameShape(QtWidgets.QFrame.StyledPanel)
         self.frame_2.setFrameShadow(QtWidgets.QFrame.Raised)
         self.frame_2.setObjectName("frame_2")
