@@ -4,3 +4,5 @@ debugpy
 Pillow
 ddddocr
 PyQt5
+pywin32
+nuitka

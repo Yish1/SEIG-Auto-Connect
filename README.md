@@ -8,7 +8,7 @@
 
 > [!TIP]
 > 原则上适用于所有广东的网页版esurfing<br>
-> 提示：打包参数：nuitka --standalone --lto=no --clang --msvc=latest --disable-ccache --windows-console-mode=disable --enable-plugin=pyqt5,upx --upx-binary=E:\ctest\o\upx\upx.exe --output-dir=o --windows-icon-from-ico=picker.ico --nofollow-import-to=unittest main.py<br>打包完后需要将仓库中的Pyqt5、ddddocr文件夹覆盖进去，(因为UPX完Pyqt5会损坏，ddddocr没被打包进去)
+> 提示：打包参数：nuitka --standalone --lto=yes --msvc=latest --disable-ccache --windows-console-mode=disable --enable-plugin=pyqt5,upx --upx-binary=F:\Programs\upx\upx.exe  --output-dir=SAC --windows-icon-from-ico=yish.ico --nofollow-import-to=unittest main.py<br>打包完后需要将仓库中的Pyqt5(可能需要)、ddddocr文件夹覆盖进去(必须)，(因为UPX完Pyqt5会损坏，ddddocr没被打包进去)
 ## 感谢
 > 验证码获取和自动获取登陆参数参考了前辈的代码[ESurfingPy-CLI](https://github.com/Pandaft/ESurfingPy-CLI)，自己原本搞得验证码一直过不了服务器
 
@@ -26,16 +26,15 @@
 - [x] 看门狗，默认每600秒检测一次网络状态，若网络不通，自动重连
 - [x] 对保存的密码低级加密
 - [x] 按下最小化按钮可以隐藏进托盘 
-
+- [x] 多拨功能
 
 ## TODO
-- [ ] 学生端账号技术攻关中...(新建文件夹) 
+- [ ] 支持更多类型账号登录(技术攻关中...) 
       
 ## 下载链接
 > 最新版下载地址：[蓝奏云下载](https://yish.lanzn.com/b004hx44wb)
 密码:6cgi<br>
-> Setup.exe即安装包版，适用于在自己电脑上使用，SEIG虚空终端.exe为单文件版，便携<br>
-> 沉梦小站发布地址：[GO！](https://cmxz.top/ktdmq)
+> 沉梦小站发布地址：[GO！](https://cmxz.top)
 >
 ## 界面图片
 > 主界面<br>

@@ -132,4 +132,4 @@ class Ui_MainWindow(object):
         self.label_3.setText(_translate("MainWindow", "SEIG-Auto-Connect"))
         self.menu.setTitle(_translate("MainWindow", "高级"))
         self.action.setText(_translate("MainWindow", "登录参数"))
-import res
+import res_rc
