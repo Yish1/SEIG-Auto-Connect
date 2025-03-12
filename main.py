@@ -24,7 +24,7 @@ from settings import Ui_sac_settings
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
-version = " 0.9 Beta 5"
+version = " 1.0 BETA 1"
 username = None
 password = None
 esurfingurl = None
@@ -293,10 +293,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         lines = []
         with open('config.ini', 'r+', encoding='utf-8') as file:
             lines = file.readlines()
+        
         updated = False
-        seen_keys = set()   # 防止重复项
+        seen_keys = set()  # 防止重复项
 
-        for i in range(len(lines)):  # 确保每个值都有\n结尾
+        # 确保每个值都有 \n 结尾，并移除无效行
+        for i in range(len(lines)):
             if not lines[i].endswith('\n'):
                 lines[i] += '\n'
             if not lines[i].startswith('['):
@@ -306,33 +308,41 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             if '=' in line:
                 key, value = line.strip().split('=', 1)
                 key = key.strip('[]')
+                value = value.strip()
+                
+                # 删除值为空的项
+                if not value:
+                    lines[i] = ''
+                    continue
+                
                 if key == variable:  # 如果存在，则替换现有的值
-                    lines[i] = f"[{key}]={new_value}\n"  # 替换成新的值，带上中括号
-                    updated = True
+                    if new_value:  # 仅在新值非空时替换
+                        lines[i] = f"[{key}]={new_value}\n"
+                        updated = True
+                    else:
+                        lines[i] = ''  # 如果新值为空，则删除此项
+
                     if key in seen_keys:
                         lines[i] = ''
-                    seen_keys.add(key.strip('[]'))  # 记录当前配置项的key
-
-                elif key.strip('[]') in seen_keys:
-                    lines[i] = ''  # 将重复项标记为空行，后续可以过滤掉
-
+                    seen_keys.add(key)
+                
+                elif key in seen_keys:
+                    lines[i] = ''  # 删除重复项
                 else:
-                    seen_keys.add(key.strip('[]'))  # 新配置项，记录该key
-        # 如不存在，则在文件末尾添加
-        if not updated:
+                    seen_keys.add(key)  # 记录新项
+
+        # 如不存在且新值非空，则在文件末尾添加
+        if not updated and new_value:
             lines.append(f"[{variable}]={new_value}\n")
 
-        lines = [line for line in lines if line != '']  # 配置文件防拉屎
+        # 过滤空行
+        lines = [line for line in lines if line.strip()]
 
         with open('config.ini', 'w+', encoding='utf-8') as file:
             file.writelines(lines)
-            # print(f"写入配置文件：[{variable}]={new_value}")
 
-        if mode == "w!":
-            pass
-        else:
+        if mode != "w!":
             self.read_config()
-
     def encrypt_rsa(self, message, pub_key):
         message_bytes = message.encode('utf-8')
         encrypted = rsa.encrypt(message_bytes, pub_key)
@@ -710,6 +720,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
         self.wlanacip = wlanacip
         self.wlanuserip = wlanuserip
         self.stop_flag = False
+        self.init_finished = False
 
         self.pushButton.clicked.connect(self.save_config)
         self.pushButton_2.clicked.connect(self.close)
@@ -746,8 +757,10 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
                 self.tabWidget_2.setCurrentIndex(self.tabWidget_2.count() - 1)
 
         if mode == "init":
-            for i in range(mulit_login - 1):
-                add_new_tab_func()
+            if self.init_finished == False:
+                for i in range(mulit_login - 1):
+                    add_new_tab_func()
+            self.init_finished = True
 
         elif mode == "add":
             add_new_tab_func()
@@ -885,7 +898,6 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
                 print("存在为空的登录配置，请完善或删除！")
                 return
 
-        # 使用 QTimer 来逐步执行每个登录任务，避免阻塞主线程
         def start_login(index=0):
             self.stop_flag = False
             if index < len(mulit_info):
