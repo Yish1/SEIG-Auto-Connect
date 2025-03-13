@@ -6,25 +6,28 @@ import requests
 import rsa
 import json
 import time
+import random
 import win32com.client
 import msvcrt
 # import debugpy
 import builtins
+import threading
 import binascii
+import subprocess
 from io import BytesIO
 from PIL import Image, ImageFilter
 import ddddocr
 import webbrowser as web
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QApplication, QWidget, QInputDialog, QSystemTrayIcon, QMenu, QAction, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
-from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject, QTimer
+from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject, QTimer, QMutex
 from ui import Ui_MainWindow  # 导入ui文件
 from settings import Ui_sac_settings
 
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
-version = " 1.0 BETA 1"
+version = 1.0
 username = None
 password = None
 esurfingurl = None
@@ -33,15 +36,19 @@ wlanuserip = None
 save_pwd = None
 auto_connect = None
 watch_dog_timeout = None
-mulit_login = None
+mulit_login = 1
 mulit_info = {}
 
 stop_watch_dog = False
 connected = False
+jar_login = False
 signature = ""
 settings_flag = None
 retry_thread_started = False
 watch_dog_thread_started = False
+new_version_checked = False
+login_thread_finished = False
+
 # RSA公钥
 rsa_public_key = """
     -----BEGIN PUBLIC KEY-----
@@ -85,6 +92,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
 
+        self.threadpool = QThreadPool()
+
         # 重写print
         global_print = builtins.print
 
@@ -97,13 +106,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 pass
             try:
                 self.listWidget.setCurrentRow(self.listWidget.count() - 1)
-            except:
-                pass
+            except Exception as e:
+                print(f"ERROR:{e}")
         builtins.print = print
 
         # 启动时运行
         self.read_config()
         self.save_password()
+        self.try_auto_connect()
 
         # 绑定按钮功能
         self.pushButton.clicked.connect(self.login)
@@ -112,7 +122,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             "save_pwd", 1 if self.checkBox.isChecked() else 0))
         self.checkBox_2.clicked.connect(lambda: self.update_config(
             "auto_connect", 1 if self.checkBox_2.isChecked() else 0) or (
-                print("开机将自启，并自动登录，需要记住密码\n看门猫每10分钟检测一次网络连接情况\n下次自动登录成功时，将启动看门猫") if self.checkBox_2.isChecked() else None) or (
+                print("开机将自启，并自动登录，需要记住密码\n看门狗每10分钟检测一次网络连接情况\n下次自动登录成功时，将启动看门狗") if self.checkBox_2.isChecked() else None) or (
                 self.checkBox.setChecked(True) if self.checkBox_2.isChecked() else None) or (
                     self.add_to_startup() if self.checkBox_2.isChecked() else self.add_to_startup(1)) or (self.update_config("save_pwd", 1))
         )
@@ -194,22 +204,33 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         shortcut.save()
 
     def try_auto_connect(self):
-        global retry_thread_started
-        try:
-            self.threadpool = QThreadPool()
-            self.auto_thread = login_Thread(5)
-            self.auto_thread.signals.enable_buttoms.connect(
-                self.enable_buttoms)
-            self.auto_thread.signals.show_input_dialog1.connect(
-                self.show_input_dialog)
-            self.auto_thread.signals.thread_login.connect(self.login)
-            self.auto_thread.signals.finished.connect(
-                lambda: print("结束线程"))
-            self.threadpool.start(self.auto_thread)
-            retry_thread_started = True
-            self.add_to_startup()
-        except Exception as e:
-            print(e)
+        global retry_thread_started, jar_login
+        self.read_config()
+        if auto_connect == "1":
+            print("正在尝试自动连接...")
+
+            if not username.startswith('t'):
+                jar_login = True
+            if jar_login:
+                self.login()
+                return
+            
+            try:
+                self.auto_thread = login_Thread(5)
+                self.auto_thread.signals.enable_buttoms.connect(
+                    self.enable_buttoms)
+                self.auto_thread.signals.show_input_dialog1.connect(
+                    self.show_input_dialog)
+                self.auto_thread.signals.thread_login.connect(self.login)
+                self.auto_thread.signals.finished.connect(
+                    lambda: print("结束线程"))
+                self.threadpool.start(self.auto_thread)
+                retry_thread_started = True
+                self.add_to_startup()
+            except Exception as e:
+                print(e)
+        else:
+            pass
 
     def mulit_login_mode(self, ip, user, pwd):
         global retry_thread_started, mulit_login
@@ -232,6 +253,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             # self.add_to_startup()
         # except Exception as e:
         #     print(e)
+
     def run_settings(self):
         global settings_flag
         if settings_flag is None:
@@ -269,7 +291,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             auto_connect = config.get('auto_connect') if config.get(
                 'auto_connect') else self.update_config("auto_connect", "0", "w!")
             watch_dog_timeout = int(config.get('watch_dog_timeout')) if config.get(
-                'watch_dog_timeout') else self.update_config("watch_dog_timeout", 600, "w!")
+                'watch_dog_timeout') else self.update_config("watch_dog_timeout", 300, "w!")
             mulit_login = int(config.get('mulit_login')) if config.get(
                 'mulit_login') else self.update_config("mulit_login", "1", "w!")
 
@@ -293,7 +315,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         lines = []
         with open('config.ini', 'r+', encoding='utf-8') as file:
             lines = file.readlines()
-        
+
         updated = False
         seen_keys = set()  # 防止重复项
 
@@ -309,12 +331,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 key, value = line.strip().split('=', 1)
                 key = key.strip('[]')
                 value = value.strip()
-                
+
                 # 删除值为空的项
                 if not value:
                     lines[i] = ''
                     continue
-                
+
                 if key == variable:  # 如果存在，则替换现有的值
                     if new_value:  # 仅在新值非空时替换
                         lines[i] = f"[{key}]={new_value}\n"
@@ -325,7 +347,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     if key in seen_keys:
                         lines[i] = ''
                     seen_keys.add(key)
-                
+
                 elif key in seen_keys:
                     lines[i] = ''  # 删除重复项
                 else:
@@ -343,6 +365,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         if mode != "w!":
             self.read_config()
+
     def encrypt_rsa(self, message, pub_key):
         message_bytes = message.encode('utf-8')
         encrypted = rsa.encrypt(message_bytes, pub_key)
@@ -418,7 +441,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             return None, None
 
     def login(self, mode=None, ip=None, user=None, pwd=None):
-        global username, password, esurfingurl, wlanacip, wlanuserip, signature, retry_thread_started, connected, watch_dog_thread_started, stop_watch_dog
+        global username, password, esurfingurl, wlanacip, wlanuserip, signature, retry_thread_started, connected, watch_dog_thread_started, stop_watch_dog, jar_login, login_thread_finished
         username = self.lineEdit.text()
         self.update_config("username", username)
         password = self.lineEdit_2.text()
@@ -441,6 +464,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             print("请输入密码")
             return
 
+        if not username.startswith('t'):  # 判断是否以 't' 开头，仅适用于广州软件学院
+            self.login_jar(username, password, wlanuserip, wlanacip)
+            jar_login = True
+            return
+
         session = requests.session()
 
         code, image = self.show_captcha_and_input_code(session)
@@ -458,7 +486,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     print("请输入验证码！")
                     return
             except Exception as e:
-                print("无法获取验证码:",e)
+                print("无法获取验证码:", e)
 
         pub_key = rsa.PublicKey.load_pkcs1_openssl_pem(rsa_public_key.encode())
 
@@ -495,12 +523,16 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     signature = response.cookies["signature"]
                     print("成功连接校园网！")
                     connected = True
+
+                    self.check_new_version()
+
                     if watch_dog_thread_started != True:
                         stop_watch_dog = False
-                        self.threadpool = QThreadPool()
                         self.watchdog_thread = watch_dog()
                         self.watchdog_thread.signals.update_progress.connect(
                             self.update_progress_bar)
+                        self.watchdog_thread.signals.print_text.connect(
+                            self.update_table)
                         self.watchdog_thread.signals.thread_login.connect(
                             self.login)
                         self.threadpool.start(self.watchdog_thread)
@@ -521,7 +553,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                                 if retry_thread_started == False:
                                     connected = False
                                     print("验证码识别错误，即将重试...")
-                                    self.threadpool = QThreadPool()
                                     self.thread = login_Thread(5)
                                     self.thread.signals.enable_buttoms.connect(
                                         self.enable_buttoms)
@@ -529,6 +560,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                                         self.show_input_dialog)
                                     self.thread.signals.thread_login.connect(
                                         self.login)
+                                    self.thread.signals.print_text.connect(
+                                        self.update_table)
                                     self.thread.signals.finished.connect(
                                         lambda: print("结束线程"))
                                     self.threadpool.start(self.thread)
@@ -542,9 +575,31 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             connected = True
             self.run_settings()
 
+        login_thread_finished = True
+
+    def login_jar(self, username, password, userip, acip):
+        self.enable_buttoms(0)
+        try:
+            self.jar_Thread = jar_Thread(username, password, userip, acip)
+            self.jar_Thread.signals.enable_buttoms.connect(self.enable_buttoms)
+            # self.jar_Thread.signals.connected_success.connect(
+            #     self.update_progress_bar)
+            self.jar_Thread.signals.print_text.connect(self.update_table)
+            self.jar_Thread.signals.update_check.connect(
+                self.check_new_version)
+            self.threadpool.start(self.jar_Thread)
+        except Exception as e:
+            print(f"登录失败：{e}")
+            self.enable_buttoms(1)
+
     def logout(self):
-        global stop_watch_dog
+        global stop_watch_dog, jar_login
         username = self.lineEdit.text()
+        if jar_login:
+            jar_Thread.terminate_all_processes()
+            jar_login = False
+            return
+
         if username and signature:
             try:
                 response = requests.post(
@@ -596,6 +651,34 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         elif mode == 0:
             self.progressBar.hide()
 
+    def update_table(self, text):
+        self.listWidget.addItem(text)
+        self.listWidget.setCurrentRow(self.listWidget.count() - 1)
+
+    def check_new_version(self):
+        self.update_thread = UpdateThread()
+        self.threadpool.start(self.update_thread)
+        self.update_thread.signals.show_message.connect(
+            self.update_message)
+        self.update_thread.signals.print_text.connect(
+            self.update_table)
+        # self.update_thread.signals.finished.connect(
+        #     lambda: print("检查更新线程结束"))
+
+    def update_message(self, message):  # 更新弹窗
+        msgBox = QMessageBox()
+        msgBox.setWindowTitle("检测到新版本！")
+        msgBox.setText(message)
+        msgBox.setWindowIcon(QtGui.QIcon(':/icons/yish.ico'))
+        okButton = msgBox.addButton("立刻前往", QMessageBox.AcceptRole)
+        noButton = msgBox.addButton("下次一定", QMessageBox.RejectRole)
+        msgBox.exec_()
+        clickedButton = msgBox.clickedButton()
+        if clickedButton == okButton:
+            os.system("start https://cmxz.top/SAC")
+        else:
+            self.update_table("检测到新版本！")
+
 
 class WorkerSignals(QObject):
     finished = pyqtSignal()
@@ -603,6 +686,10 @@ class WorkerSignals(QObject):
     show_input_dialog1 = pyqtSignal()
     thread_login = pyqtSignal()
     update_progress = pyqtSignal(int, int, int)
+    connected_success = pyqtSignal()
+    print_text = pyqtSignal(str)
+    show_message = pyqtSignal(str, str)
+    update_check = pyqtSignal()
 
 
 class login_Thread(QRunnable):
@@ -616,22 +703,171 @@ class login_Thread(QRunnable):
         # debugpy.breakpoint()
         self.signals.enable_buttoms.emit(0)
         while self.times > 0:
-            time.sleep(2)
+            time.sleep(3)
             if connected == True:
                 retry_thread_started = False
                 self.signals.enable_buttoms.emit(1)
                 self.signals.finished.emit()
                 return
-            print(f"登录失败,还剩{self.times}次尝试")
+                
+            self.signals.print_text.emit(f"登录失败,还剩{self.times}次尝试")
             self.times -= 1
             self.signals.thread_login.emit()
         if connected == False:
             retry_thread_started = False
-            print("已多次尝试无法获取验证码，请手动输入验证码、重试或联系Yish_")
+            self.signals.print_text.emit("已多次尝试无法获取验证码，请手动输入验证码、重试或联系Yish_")
             if self.times == 0:
                 self.signals.show_input_dialog1.emit()
         self.signals.enable_buttoms.emit(1)
         self.signals.finished.emit()
+
+
+class jar_Thread(QRunnable):
+    processes = []
+    lock = QMutex()  # 线程锁，防止竞争条件
+
+    def __init__(self, username, password, userip, acip):
+        super().__init__()
+        self.signals = WorkerSignals()
+        self.username = username
+        self.password = password
+        self.userip = userip
+        self.acip = acip
+        self.process = None  # 存储当前线程的进程
+
+    def run(self):
+        # debugpy.breakpoint()
+        try:
+            java_executable = os.path.join(
+                os.getcwd(), "jre", "bin", "java.exe")
+            jar_path = os.path.join(os.getcwd(), "login.jar")
+
+            if not os.path.exists(java_executable):
+                self.signals.print_text.emit("错误：找不到 Java 运行环境！")
+                return
+            if not os.path.exists(jar_path):
+                self.signals.print_text.emit("错误：找不到 login.jar！")
+                return
+
+            java_cmd = [
+                java_executable, "-jar", jar_path,
+                "-u", self.username,
+                "-p", self.password,
+                "-t", self.userip,
+                "-a", self.acip
+            ]
+
+            startupinfo = None
+            if os.name == "nt":  # 仅 Windows 适用
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+            # 启动新的子进程
+            self.process = subprocess.Popen(
+                java_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,  # 兼容不同 Python 版本
+                startupinfo=startupinfo,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            )
+
+            pid = self.process.pid
+
+            jar_Thread.lock.lock()  # 手动上锁
+            jar_Thread.processes.append(self.process)
+            jar_Thread.lock.unlock()  # 解锁
+
+            self.signals.print_text.emit(f"进程 {pid} 启动成功！")
+
+            heartbeat_messages = [
+                "『你所期望的未来，正缓缓展开』",
+                "『一旦开始，便无法停止！』心跳信号已准备就绪！",
+                "『就算世界与我为敌，我也要守护这份连接！』心跳已启动！",
+                "『我将跨越时空，为你传递这份心跳！』",
+                "『超电磁炮已充能完毕！』心跳信号启动！",
+                "『心跳的频率，正与你的IP地址合奏成旋律。』",
+                "『只要心跳仍在，我们就不会掉线。』",
+            ]
+
+            # 处理子进程的输出
+            def read_output():
+                global connected, login_thread_finished
+                while True:
+                    output = self.process.stdout.readline()
+                    if output:
+                        self.signals.print_text.emit(
+                            f"{pid}: {output.strip()}")
+
+                        if "The login has been authorized" in output:
+                            self.signals.connected_success.emit()
+                            self.signals.enable_buttoms.emit(1)
+                            connected = True
+                            self.signals.print_text.emit(
+                                f"{pid}: 登录成功！即将发送心跳... :)")
+                            # 发送随机心跳消息
+                            message = random.choice(heartbeat_messages)
+                            self.signals.print_text.emit(f"{pid}:{message}")
+
+                        if "Send Keep Packet" in output:
+                            self.signals.print_text.emit(f"{pid}: 心跳成功，请不要关闭此程序，\n需要每480秒心跳保持连接！")
+                            self.signals.update_check.emit()
+
+                        if "KeepUrl is empty" in output:
+                            jar_Thread.terminate_all_processes(pid)  # 终止当前进程
+                            self.signals.print_text.emit(
+                                f"{pid}: 登录失败，账号或密码错误！")
+                            # self.signals.update_check.emit()
+                            self.signals.enable_buttoms.emit(1)
+                        
+                        login_thread_finished = True
+
+                    if self.process.poll() is not None:  # 进程结束时跳出
+                        break
+
+                self.process.stdout.close()
+                self.process.stderr.close()
+
+            output_thread = threading.Thread(target=read_output, daemon=True)
+            output_thread.start()
+
+        except Exception as e:
+            self.signals.print_text.emit(f"登录失败: {str(e)}")
+            self.signals.enable_buttoms.emit(1)
+
+        self.signals.finished.emit()
+
+    @staticmethod
+    def terminate_all_processes(pid=None):
+        global login_thread_finished
+        """终止特定进程或所有进程"""
+        jar_Thread.lock.lock()  # 手动上锁
+        try:
+            if pid is None:
+                # 终止所有进程
+                for process in jar_Thread.processes:
+                    try:
+                        process.terminate()
+                        process.wait()
+                        print(f"进程 {process.pid} 已终止。")
+                    except Exception as e:
+                        print(f"终止进程 {process.pid} 时出错: {str(e)}")
+                jar_Thread.processes.clear()
+            else:
+                # 终止特定进程
+                for process in jar_Thread.processes[:]:
+                    if process.pid == pid:
+                        try:
+                            process.terminate()
+                            process.wait()
+                            print(f"进程 {pid} 已终止。")
+                            jar_Thread.processes.remove(process)
+                        except Exception as e:
+                            print(f"终止进程 {pid} 时出错: {str(e)}")
+                        break  # 找到并终止后即可退出循环
+        finally:
+            jar_Thread.lock.unlock()  # 释放锁
+            login_thread_finished = True
 
 
 class watch_dog(QRunnable):
@@ -640,10 +876,11 @@ class watch_dog(QRunnable):
         self.signals = WorkerSignals()
         try:
             self.ping_timeout = watch_dog_timeout  # 默认设置超时时间
-            print(f"看门猫:已就位！网络状态变化时或每{self.ping_timeout}秒检测一次网络")
+            self.signals.print_text.emit(
+                f"看门狗:已就位！每{self.ping_timeout}秒检测一次网络")
             self.signals.update_progress.emit(1, 0, 100)
         except:
-            self.ping_timeout = 600
+            self.ping_timeout = 300
         self.reconnect_timeout = 30
 
     def ping_baidu(self):
@@ -661,7 +898,7 @@ class watch_dog(QRunnable):
             watch_dog_thread_started = True
             while True:
                 if stop_watch_dog:
-                    print("看门猫:停止监测")
+                    self.signals.print_text.emit("看门狗:停止监测")
                     break
 
                 total_sleep_time = self.ping_timeout
@@ -669,12 +906,12 @@ class watch_dog(QRunnable):
 
                 while total_sleep_time > 0:
                     if stop_watch_dog:
-                        print("看门猫:停止监测")
+                        self.signals.print_text.emit("看门狗:停止监测")
                         watch_dog_thread_started = False
                         try:
                             self.signals.update_progress.emit(0, 0, 0)
                         except:
-                            print("信号槽已被删除")
+                            self.signals.print_text.emit("信号槽已被删除")
                         return
                     time.sleep(step)
                     total_sleep_time -= step
@@ -684,24 +921,25 @@ class watch_dog(QRunnable):
                         self.signals.update_progress.emit(
                             1, progress_value, 100)
                     except:
-                        print("信号槽已被删除")
+                        self.signals.print_text.emit("信号槽已被删除")
 
                 if not self.ping_baidu():
                     current_time = time.strftime(
                         "%Y-%m-%d %H:%M:%S", time.localtime())
-                    print(f"看门猫:网络断开，重新登录...[{current_time}]")
+                    self.signals.print_text.emit(
+                        f"看门狗:网络断开，重新登录...[{current_time}]")
                     # 若断开超时改为60s
                     self.ping_timeout = self.reconnect_timeout
                     try:
                         self.signals.thread_login.emit()
                     except Exception as e:
-                        print(f"看门猫:登录失败: {e}")
+                        self.signals.print_text.emit(f"看门狗:登录失败: {e}")
                 else:
                     # 恢复超时
                     self.ping_timeout = original_interval
-                    print("看门猫:网络正常无需操作")
+                    self.signals.print_text.emit("看门狗:网络正常无需操作")
         else:
-            print("看门猫:线程已启动无需再次启动")
+            self.signals.print_text.emit("看门狗:线程已启动无需再次启动")
 
 
 class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
@@ -725,16 +963,19 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
         self.pushButton.clicked.connect(self.save_config)
         self.pushButton_2.clicked.connect(self.close)
         self.pushButton_3.clicked.connect(self.get_default)
-        self.tabWidget_2.currentChanged.connect(lambda index: self.tab_changed(index, 0))
-        self.tabWidget.currentChanged.connect(lambda index: self.tab_changed(index, 1))
+        self.tabWidget_2.currentChanged.connect(
+            lambda index: self.tab_changed(index, 0))
+        self.tabWidget.currentChanged.connect(
+            lambda index: self.tab_changed(index, 1))
         self.pushButton_4.clicked.connect(lambda: self.add_new_tab("add"))
         self.pushButton_5.clicked.connect(self.del_tab)
         self.pushButton_6.clicked.connect(self.mulit_login_now)
 
         self.get_config_value()
-    
-    def add_new_tab(self, mode = None):
+
+    def add_new_tab(self, mode=None):
         global mulit_login
+
         def add_new_tab_func():
             latest_index = self.tabWidget_2.count() - 1
             if latest_index == 4:
@@ -758,6 +999,10 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
 
         if mode == "init":
             if self.init_finished == False:
+                if mulit_login:
+                    pass
+                else:
+                    mulit_login = 1
                 for i in range(mulit_login - 1):
                     add_new_tab_func()
             self.init_finished = True
@@ -766,7 +1011,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
             add_new_tab_func()
             mulit_login += 1
             self.main_instance.update_config("mulit_login", mulit_login)
-        
+
     def del_tab(self):
         global mulit_login
         latest_index = self.tabWidget_2.count() - 1
@@ -777,7 +1022,8 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
             mulit_login -= 1
             self.main_instance.update_config("mulit_login", mulit_login)
             for i in range(3):
-                self.main_instance.update_config(f"line_edit_{mulit_login}_{i + 1}", "")
+                self.main_instance.update_config(
+                    f"line_edit_{mulit_login}_{i + 1}", "")
         else:
             QMessageBox.warning(self, "警告", "必须保留一个配置项")
 
@@ -799,7 +1045,6 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
                 self.add_new_tab("init")
         elif mode == 0:
             self.add_controls_to_tab(index)
-            
 
     def add_controls_to_tab(self, index):
         current_tab = self.tabWidget_2.widget(index)  # 获取当前选中的 tab 页
@@ -812,8 +1057,8 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
 
         layout = QVBoxLayout()
         current_tab.setLayout(layout)  # 设置新的布局
-        
-        labelname = ["IP地址:","账号:","密码:"]
+
+        labelname = ["IP地址:", "账号:", "密码:"]
         # 三个 QLabel 和三个 QLineEdit
         for i in range(3):
             label = QLabel(labelname[i])
@@ -826,16 +1071,17 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
             layout.addWidget(label)
             layout.addWidget(line_edit)
 
-            line_edit.textChanged.connect(lambda text, le=line_edit: self.on_text_changed(le, text))
+            line_edit.textChanged.connect(
+                lambda text, le=line_edit: self.on_text_changed(le, text))
             text = self.read_config(line_edit.objectName())
-            line_edit.setText(text)            
+            line_edit.setText(text)
 
         # print(f"Layout and controls added to tab {current_tab.objectName()}")
 
-    def read_config(self, le_name):
+    def read_config(self, le_name, mode=None):
         global mulit_info
         mconfig = {}
-        
+
         if not os.path.exists('config.ini'):
             self.main_instance.read_config()
 
@@ -848,7 +1094,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
                         if key.strip('[]').split('_')[3] == '3':
                             value = ''.join(
                                 chr(ord(char) - 10) for char in value)
-                        
+
                         tab_num = key.strip('[]').split('_')[2]
                         login_info = key.strip('[]').split('_')[3]
 
@@ -856,30 +1102,35 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
                             mulit_info[tab_num] = {}
 
                         mulit_info[tab_num][login_info] = value
-                            # [line_edit_0_1]=192.168.1.1
-                            # [line_edit_0_2]=123123
-                            # [line_edit_0_3]=123123
-                            # [line_edit_1_1]=192.168.1.2
-                            # [line_edit_1_2]=114514
-                            # [line_edit_1_3]=114514
+                        # [line_edit_0_1]=192.168.1.1
+                        # [line_edit_0_2]=123123
+                        # [line_edit_0_3]=123123
+                        # [line_edit_1_1]=192.168.1.2
+                        # [line_edit_1_2]=114514
+                        # [line_edit_1_3]=114514
                     mconfig[key.strip('[]')] = value.strip()
+                    if mode:
+                        return
         try:
             text = mconfig.get(le_name)
             return text
-        
+
         except:
             return ""
-                
+
     def on_text_changed(self, line_edit, text):
         # 在这里处理文本变化的信号
         if line_edit.objectName().split('_')[3] == "3":
             encrypted_password = ''.join(
                 chr(ord(char) + 10) for char in text)
-            self.main_instance.update_config(line_edit.objectName(), encrypted_password)
+            self.main_instance.update_config(
+                line_edit.objectName(), encrypted_password)
             return
         self.main_instance.update_config(line_edit.objectName(), text)
 
     def mulit_login_now(self):
+        global mulit_info
+        mulit_info = {}
         a = self.read_config("")
         # {'0': {'1': '192.168.1.1', '2': '123123', '3': ''}, '1': {'1': '', '2': '', '3': ''}}
 
@@ -891,7 +1142,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
 
             if ip != '' and user != '' and pwd != '':
                 self.main_instance.mulit_login_mode(ip, user, pwd)
-                
+
             else:
                 self.stop_flag = True
                 self.show_message("存在为空的登录配置，请完善或删除！", "提示")
@@ -906,12 +1157,12 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
 
                 if self.stop_flag:
                     return
-                
+
                 if index < len(mulit_info) - 1:
                     print("5秒后执行下一拨号任务")
                     QTimer.singleShot(5000, lambda: start_login(index + 1))
             else:
-                print("所有任务已完成")                
+                print("所有任务已完成")
 
         # 启动登录过程
         start_login()
@@ -958,6 +1209,44 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
         event.accept()
 
 
+class UpdateThread(QRunnable):
+    def __init__(self):
+        super().__init__()
+        self.signals = WorkerSignals()
+
+    def run(self):
+        # debugpy.breakpoint()  # 在此线程启动断点调试
+        global new_version_checked
+        headers = {
+            'User-Agent': 'CMXZ-SAC_%s' % (version)
+        }
+        # self.signals.print_text.emit(str(headers))
+        updatecheck = "https://cmxz.top/programs/sac/check.php"
+
+        if new_version_checked == True:
+            return
+
+        try:
+            page = requests.get(updatecheck, timeout=5, headers=headers)
+            newversion = float(page.text)
+            # self.signals.print_text.emit("云端版本号为:", newversion)
+            findnewversion = "检测到新版本！"
+            # self.signals.print_text.emit(str(newversion))
+            if newversion > version:  # and float(latest_version) < newversion:
+                # self.signals.print_text.emit(f"检测到新版本:{newversion},当前版本为:{version}")
+                new_version_detail = requests.get(
+                    updatecheck + "?detail", timeout=5, headers=headers)
+                new_version_detail = new_version_detail.text
+                self.signals.show_message.emit("云端最新版本: %s<br>当前版本: %s<br><br>%s" % (
+                    newversion, version, new_version_detail), findnewversion)
+            new_version_checked = True
+
+        except Exception as e:
+            self.signals.print_text.emit(f"CHECK_UPDATE_ERROR: {e}")
+
+        self.signals.finished.emit()
+
+
 if __name__ == "__main__":
     try:
         # 防止重复运行
@@ -989,9 +1278,6 @@ if __name__ == "__main__":
         app = QtWidgets.QApplication(sys.argv)
         mainWindow = MainWindow()
         mainWindow.show()
-        if auto_connect == "1":
-            print("正在尝试自动连接...")
-            mainWindow.try_auto_connect()
         sys.exit(app.exec_())
     except Exception as e:
         user32 = ctypes.windll.user32
