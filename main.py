@@ -27,7 +27,7 @@ from settings import Ui_sac_settings
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
-version = 1.0
+version = 1.01
 username = None
 password = None
 esurfingurl = None
@@ -72,7 +72,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         global retry_thread_started
         super().__init__()
         self.setupUi(self)  # 初始化UI
-        self.setMinimumSize(QtCore.QSize(233, 498))
+        self.setMinimumSize(QtCore.QSize(263, 577))
         self.progressBar.hide()
 
         self.tray_icon = QSystemTrayIcon(QtGui.QIcon(':/icon/yish.ico'), self)
@@ -112,7 +112,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         # 启动时运行
         self.read_config()
-        self.save_password()
+        self.init_save_password()
         self.try_auto_connect()
 
         # 绑定按钮功能
@@ -161,7 +161,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         stop_watch_dog = True
         event.accept()
 
-    def save_password(self):
+    def init_save_password(self):
         if save_pwd == "1":
             decrypted_password = ''.join(
                 chr(ord(char) - 10) for char in password)
@@ -466,6 +466,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             return
 
         if not username.startswith('t'):  # 判断是否以 't' 开头，仅适用于广州软件学院
+            
             self.login_jar(username, password, wlanuserip, wlanacip)
             jar_login = True
             return
@@ -588,10 +589,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.jar_Thread.signals.print_text.connect(self.update_table)
             self.jar_Thread.signals.update_check.connect(
                 self.check_new_version)
+            self.jar_Thread.signals.jar_login_success.connect(
+                self.save_password)
             self.threadpool.start(self.jar_Thread)
         except Exception as e:
             print(f"登录失败：{e}")
             self.enable_buttoms(1)
+
+    def save_password(self):
+        if self.checkBox.isChecked():
+            encrypted_password = ''.join(
+                chr(ord(char) + 10) for char in password)
+            self.update_config("password", encrypted_password)
 
     def logout(self):
         global stop_watch_dog, jar_login
@@ -693,6 +702,7 @@ class WorkerSignals(QObject):
     show_message = pyqtSignal(str, str)
     update_check = pyqtSignal()
     logout = pyqtSignal()
+    jar_login_success = pyqtSignal()
 
 
 class login_Thread(QRunnable):
@@ -811,6 +821,8 @@ class jar_Thread(QRunnable):
                             # 发送随机心跳消息
                             message = random.choice(heartbeat_messages)
                             self.signals.print_text.emit(f"{pid}:{message}")
+                            # 发送保存密码信号
+                            self.signals.jar_login_success.emit()
 
                         if "Send Keep Packet" in output:
                             self.signals.print_text.emit(f"{pid}: 心跳成功，请不要关闭此程序，\n需要每480秒心跳保持连接！")
@@ -953,7 +965,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
         self.setupUi(central_widget)
         self.setWindowTitle("登录参数")
         self.setWindowIcon(QtGui.QIcon(':/icon/yish.ico'))
-        self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+        # self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         self.resize(260, 420)
 
         self.label_4.hide()
@@ -1259,7 +1271,7 @@ class UpdateThread(QRunnable):
             new_version_checked = True
                         
         except Exception as e:
-            self.signals.print_text.emit(f"CHECK_UPDATE_ERROR: {e}")
+            self.signals.print_text.emit(f"CMXZ_API_CHECK_UPDATE_ERROR: {e}")
 
         self.signals.finished.emit()
 
