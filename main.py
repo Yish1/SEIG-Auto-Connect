@@ -130,6 +130,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.pushButton_3.clicked.connect(
             lambda: web.open_new("https://cmxz.top"))
         self.run_settings_action.triggered.connect(self.run_settings)
+        print("感谢您使用此工具！\n请不要在任何大型社交平台\n(B站、贴吧、小红书、狐友等)\n讨论此工具！")
 
     def changeEvent(self, event):
         if event.type() == QtCore.QEvent.WindowStateChange:
@@ -662,6 +663,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.update_message)
         self.update_thread.signals.print_text.connect(
             self.update_table)
+        self.update_thread.signals.logout.connect(self.logout)
         # self.update_thread.signals.finished.connect(
         #     lambda: print("检查更新线程结束"))
 
@@ -690,6 +692,7 @@ class WorkerSignals(QObject):
     print_text = pyqtSignal(str)
     show_message = pyqtSignal(str, str)
     update_check = pyqtSignal()
+    logout = pyqtSignal()
 
 
 class login_Thread(QRunnable):
@@ -950,6 +953,8 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
         self.setupUi(central_widget)
         self.setWindowTitle("登录参数")
         self.setWindowIcon(QtGui.QIcon(':/icon/yish.ico'))
+        self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+        self.resize(260, 420)
 
         self.label_4.hide()
 
@@ -1225,6 +1230,18 @@ class UpdateThread(QRunnable):
 
         if new_version_checked == True:
             return
+        
+        try:
+            is_enable = requests.get(
+                updatecheck + "?enable", timeout=5, headers=headers)
+            is_enable = int(is_enable.text)
+
+            if is_enable == 0:
+                self.signals.show_message.emit("当前版本已被停用，请及时更新！", "警告")
+                self.signals.logout.emit()
+                return
+        except:
+            pass
 
         try:
             page = requests.get(updatecheck, timeout=5, headers=headers)
@@ -1240,7 +1257,7 @@ class UpdateThread(QRunnable):
                 self.signals.show_message.emit("云端最新版本: %s<br>当前版本: %s<br><br>%s" % (
                     newversion, version, new_version_detail), findnewversion)
             new_version_checked = True
-
+                        
         except Exception as e:
             self.signals.print_text.emit(f"CHECK_UPDATE_ERROR: {e}")
 

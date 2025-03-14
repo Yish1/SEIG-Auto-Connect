@@ -26,7 +26,9 @@
    <string>MainWindow</string>
   </property>
   <property name="styleSheet">
-   <string notr="true"/>
+   <string notr="true">* {
+    font-size: 15px;
+}</string>
   </property>
   <property name="iconSize">
    <size>
@@ -232,7 +234,7 @@
      <x>0</x>
      <y>0</y>
      <width>233</width>
-     <height>22</height>
+     <height>26</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu">
