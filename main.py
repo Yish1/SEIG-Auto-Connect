@@ -1,64 +1,6 @@
-import re
-import os
-import sys
-import ctypes
-import requests
-import rsa
-import json
-import time
-import random
 import win32com.client
-import msvcrt
-# import debugpy
-import builtins
-import threading
-import binascii
 import subprocess
 from io import BytesIO
-from PIL import Image, ImageFilter
-import ddddocr
-import webbrowser as web
-from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import QApplication, QWidget, QInputDialog, QSystemTrayIcon, QMenu, QAction, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
-from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject, QTimer, QMutex
-from ui import Ui_MainWindow  # 导入ui文件
-from settings import Ui_sac_settings
-
-# debugpy.listen(("0.0.0.0", 5678))
-# debugpy.wait_for_client()  # 等待调试器连接
-
-version = 1.01
-username = None
-password = None
-esurfingurl = None
-wlanacip = None
-wlanuserip = None
-save_pwd = None
-auto_connect = None
-watch_dog_timeout = None
-mulit_login = 1
-mulit_info = {}
-
-stop_watch_dog = False
-connected = False
-jar_login = False
-signature = ""
-settings_flag = None
-retry_thread_started = False
-watch_dog_thread_started = False
-new_version_checked = False
-login_thread_finished = False
-
-# RSA公钥
-rsa_public_key = """
-    -----BEGIN PUBLIC KEY-----
-    MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCyhncn4Z4RY8wITqV7n6hAapEM
-    ZwNBP6fflsGs3Ke5g6Ji4AWvNflIXZLNTGIuykoU1v2Bitylyuc9nSKLTvBdcytB
-    +4X4CvV4oVDr2aLrXs7LhTNyykcxyhyGhokph0Cb4yR/mybK6OeH2ME1/AZS7AZ4
-    pe2gw9lcwXQVF8DJwwIDAQAB
-    -----END PUBLIC KEY-----
-    """
-
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QApplication, QWidget, QInputDialog, QSystemTrayIcon, QMenu, QAction, QVBoxLayout, QLabel, \
     QLineEdit, QPushButton, QMessageBox
