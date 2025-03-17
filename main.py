@@ -59,17 +59,67 @@ rsa_public_key = """
     -----END PUBLIC KEY-----
     """
 
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtWidgets import QApplication, QWidget, QInputDialog, QSystemTrayIcon, QMenu, QAction, QVBoxLayout, QLabel, \
+    QLineEdit, QPushButton, QMessageBox
+from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject, QTimer, QMutex
+from ui import Ui_MainWindow  # 导入ui文件
+from settings import Ui_sac_settings
+import requests
+import rsa
+import json
+import binascii
+from PIL import Image, ImageFilter
+import ddddocr
+import webbrowser as web
+import builtins
+import threading
+import os
+import sys
+import ctypes
+import random
+import re
+import time
+import msvcrt
+
+# debugpy.listen(("0.0.0.0", 5678))
+# debugpy.wait_for_client()  # 等待调试器连接
+
+version = 1.01
+username = None
+password = None
+esurfingurl = None
+wlanacip = None
+wlanuserip = None
+save_pwd = None
+auto_connect = None
+watch_dog_timeout = None
+mulit_login = 1
+mulit_info = {}
+
+stop_watch_dog = False
+connected = False
+jar_login = False
+signature = ""
+settings_flag = None
+retry_thread_started = False
+watch_dog_thread_started = False
+new_version_checked = False
+login_thread_finished = False
+
+# RSA公钥
+rsa_public_key = """
+    -----BEGIN PUBLIC KEY-----
+    MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCyhncn4Z4RY8wITqV7n6hAapEM
+    ZwNBP6fflsGs3Ke5g6Ji4AWvNflIXZLNTGIuykoU1v2Bitylyuc9nSKLTvBdcytB
+    +4X4CvV4oVDr2aLrXs7LhTNyykcxyhyGhokph0Cb4yR/mybK6OeH2ME1/AZS7AZ4
+    pe2gw9lcwXQVF8DJwwIDAQAB
+    -----END PUBLIC KEY-----
+    """
+
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
-    def setupUi(self, MainWindow):
-        super().setupUi(MainWindow)
-        self.setWindowTitle(f"SEIG虚空终端{version}")
-        self.setWindowIcon(QtGui.QIcon(':/icon/yish.ico'))
-        self.run_settings_action = QtWidgets.QAction("登录参数", self)
-        self.menu.addAction(self.run_settings_action)
-
     def __init__(self):
-        global retry_thread_started
         super().__init__()
         self.setupUi(self)  # 初始化UI
         self.setMinimumSize(QtCore.QSize(263, 577))
@@ -82,13 +132,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         tray_menu = QMenu(self)
         restore_action = QAction("恢复", self)
         quit_action = QAction("退出", self)
+        self.run_settings_action = QAction("登录参数", self)  # 定义并初始化 run_settings_action
 
         restore_action.triggered.connect(self.showNormal)
         quit_action.triggered.connect(self.close)
-        # self.tray_icon.activated.connect(lambda:self.showNormal() or self.activateWindow())
-
+        self.run_settings_action.triggered.connect(self.run_settings)  # 绑定触发事件
         tray_menu.addAction(restore_action)
         tray_menu.addAction(quit_action)
+        tray_menu.addAction(self.run_settings_action)  # 添加到托盘菜单
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
 
@@ -101,13 +152,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             global_print(*args, **kwargs)
             text = " ".join(map(str, args))
             try:
-                self.listWidget.addItem(text)
+                self.update_table(text)
             except:
                 pass
             try:
                 self.listWidget.setCurrentRow(self.listWidget.count() - 1)
             except Exception as e:
                 print(f"ERROR:{e}")
+
         builtins.print = print
 
         # 启动时运行
@@ -122,15 +174,21 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             "save_pwd", 1 if self.checkBox.isChecked() else 0))
         self.checkBox_2.clicked.connect(lambda: self.update_config(
             "auto_connect", 1 if self.checkBox_2.isChecked() else 0) or (
-                print("开机将自启，并自动登录，需要记住密码\n看门狗每10分钟检测一次网络连接情况\n下次自动登录成功时，将启动看门狗") if self.checkBox_2.isChecked() else None) or (
-                self.checkBox.setChecked(True) if self.checkBox_2.isChecked() else None) or (
-                    self.add_to_startup() if self.checkBox_2.isChecked() else self.add_to_startup(1)) or (self.update_config("save_pwd", 1))
-        )
+                                                    print(
+                                                        "开机将自启，并自动登录，需要记住密码\n看门狗每10分钟检测一次网络连接情况\n下次自动登录成功时，将启动看门狗") if self.checkBox_2.isChecked() else None) or (
+                                                    self.checkBox.setChecked(
+                                                        True) if self.checkBox_2.isChecked() else None) or (
+                                                    self.add_to_startup() if self.checkBox_2.isChecked() else self.add_to_startup(
+                                                        1)) or (self.update_config("save_pwd", 1))
+                                        )
 
         self.pushButton_3.clicked.connect(
             lambda: web.open_new("https://cmxz.top"))
         self.run_settings_action.triggered.connect(self.run_settings)
         print("感谢您使用此工具！\n请不要在任何大型社交平台\n(B站、贴吧、小红书、狐友等)\n讨论此工具！")
+
+        self.log_count = 0  # 初始化日志计数器
+        self.log_message = ""  # 初始化日志消息
 
     def changeEvent(self, event):
         if event.type() == QtCore.QEvent.WindowStateChange:
@@ -215,7 +273,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             if jar_login:
                 self.login()
                 return
-            
+
             try:
                 self.auto_thread = login_Thread(5)
                 self.auto_thread.signals.enable_buttoms.connect(
@@ -239,21 +297,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.login("mulit", ip, user, pwd)
         except Exception as e:
             print(e)
-        # try:
-        # self.threadpool = QThreadPool()
-        # self.auto_thread = login_Thread(2)
-        # self.auto_thread.signals.enable_buttoms.connect(
-        #     self.enable_buttoms)
-        # self.auto_thread.signals.show_input_dialog1.connect(
-        #     self.show_input_dialog)
-        # self.auto_thread.signals.thread_login.connect(lambda:self.login("mulit", ip, user, pwd))
-        # self.auto_thread.signals.finished.connect(
-        #     lambda: print("结束线程"))
-        # self.threadpool.start(self.auto_thread)
-        # retry_thread_started = True
-            # self.add_to_startup()
-        # except Exception as e:
-        #     print(e)
 
     def run_settings(self):
         global settings_flag
@@ -312,6 +355,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.read_config()
         return config
 
+    def show_warning(self, message):
+        msgBox = QMessageBox()
+        msgBox.setWindowTitle("警告")
+        msgBox.setText(message)
+        msgBox.exec_()
     def update_config(self, variable, new_value, mode=None):
         lines = []
         with open('config.ini', 'r+', encoding='utf-8') as file:
@@ -412,6 +460,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             print(f"解析页面失败：{e}")
             self.run_settings()
             return None
+
     # 自动识别验证码
 
     def show_captcha_and_input_code(self, session):
@@ -442,142 +491,147 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             return None, None
 
     def login(self, mode=None, ip=None, user=None, pwd=None):
-        global username, password, esurfingurl, wlanacip, wlanuserip, signature, retry_thread_started, connected, watch_dog_thread_started, stop_watch_dog, jar_login, login_thread_finished
-        username = self.lineEdit.text()
-        self.update_config("username", username)
-        password = self.lineEdit_2.text()
-
-        if mode == "mulit":
-            username = user
-            password = pwd
-            wlanuserip = ip
-
-        print("即将登录: " + username + " IP: " + wlanuserip)
-
-        if esurfingurl == "0.0.0.0:0" or esurfingurl == "自动获取失败,请检查网线连接":
-            self.run_settings()
-            print("请先获取或手动填写参数！")
-            return
-        if not username:
-            print("请输入上网帐号，@后面去掉")
-            return
-        if not password or password == "0":
-            print("请输入密码")
-            return
-
-        if not username.startswith('t'):  # 判断是否以 't' 开头，仅适用于广州软件学院
-            
-            self.login_jar(username, password, wlanuserip, wlanacip)
-            jar_login = True
-            return
-
-        session = requests.session()
-
-        code, image = self.show_captcha_and_input_code(session)
-
-        if mode == 1:
-            try:
-                image.show()
-                self.window = QWidget()
-                self.window.setWindowIcon(QtGui.QIcon(':/icon/yish.ico'))
-                cust_code, ok_pressed = QInputDialog.getText(
-                    self.window, "手动输入验证码", "请输入验证码:")
-                if ok_pressed and cust_code:
-                    code = cust_code
-                else:
-                    print("请输入验证码！")
-                    return
-            except Exception as e:
-                print("无法获取验证码:", e)
-
-        pub_key = rsa.PublicKey.load_pkcs1_openssl_pem(rsa_public_key.encode())
-
-        # 登录数据
-        login_data = {
-            "userName": username,
-            "password": password,
-            "rand": code
-        }
-
-        login_key = self.encrypt_rsa(json.dumps(login_data), pub_key)
-        # 构造请求头和Cookie
-        headers = {
-            "Origin": f"http://{esurfingurl}",
-            "Referer": f"http://{esurfingurl}/qs/index_gz.jsp?wlanacip={wlanacip}&wlanuserip={wlanuserip}",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
-        }
-
-        # 构造请求参数
-        post_data = {
-            'loginKey': login_key,
-            'wlanuserip': wlanuserip,
-            'wlanacip': wlanacip
-        }
-
-        # 发送POST请求
         try:
-            response = session.post(
-                f'http://{esurfingurl}/ajax/login', timeout=3, headers=headers, data=post_data)
+            global username, password, esurfingurl, wlanacip, wlanuserip, signature, retry_thread_started, connected, watch_dog_thread_started, stop_watch_dog, jar_login, login_thread_finished
+            username = self.lineEdit.text()
+            self.update_config("username", username)
+            password = self.lineEdit_2.text()
 
-            if response.status_code == 200:
-                data = response.json()
-                if data['resultCode'] == "0" or data['resultCode'] == "13002000":
-                    signature = response.cookies["signature"]
-                    print("成功连接校园网！")
-                    connected = True
+            if mode == "mulit":
+                username = user
+                password = pwd
+                wlanuserip = ip
 
-                    self.check_new_version()
+            print("即将登录: " + username + " IP: " + wlanuserip)
 
-                    if watch_dog_thread_started != True:
-                        stop_watch_dog = False
-                        self.watchdog_thread = watch_dog()
-                        self.watchdog_thread.signals.update_progress.connect(
-                            self.update_progress_bar)
-                        self.watchdog_thread.signals.print_text.connect(
-                            self.update_table)
-                        self.watchdog_thread.signals.thread_login.connect(
-                            self.login)
-                        self.threadpool.start(self.watchdog_thread)
-                    if self.checkBox.isChecked():
-                        encrypted_password = ''.join(
-                            chr(ord(char) + 10) for char in password)
-                        self.update_config("password", encrypted_password)
-                    self.update_config("username", username)
-                elif data['resultCode'] == "13018000":
-                    print("已办理一人一号多终端业务的用户，请使用客户端登录")
-                else:
-                    print(f"登录失败: {data['resultInfo']}")
-                    if data['resultInfo'] == "验证码错误":
-                        if mode == "mulit":
-                            pass
-                        else:
-                            try:
-                                if retry_thread_started == False:
-                                    connected = False
-                                    print("验证码识别错误，即将重试...")
-                                    self.thread = login_Thread(5)
-                                    self.thread.signals.enable_buttoms.connect(
-                                        self.enable_buttoms)
-                                    self.thread.signals.show_input_dialog1.connect(
-                                        self.show_input_dialog)
-                                    self.thread.signals.thread_login.connect(
-                                        self.login)
-                                    self.thread.signals.print_text.connect(
-                                        self.update_table)
-                                    self.thread.signals.finished.connect(
-                                        lambda: print("结束线程"))
-                                    self.threadpool.start(self.thread)
-                                    retry_thread_started = True
-                            except:
+            # 检查用户名和密码是否为空
+            if not username:
+                self.show_warning("请输入上网帐号！")
+                return
+            if not password or password == "0":
+                self.show_warning("请输入密码！")
+                return
+
+            if esurfingurl == "0.0.0.0:0" or esurfingurl == "自动获取失败,请检查网线连接":
+                self.run_settings()
+                print("请先获取或手动填写参数！")
+                return
+
+            if not username.startswith('t'):  # 判断是否以 't' 开头，仅适用于广州软件学院
+                self.login_jar(username, password, wlanuserip, wlanacip)
+                jar_login = True
+                return
+
+            session = requests.session()
+
+            code, image = self.show_captcha_and_input_code(session)
+
+            if mode == 1:
+                try:
+                    image.show()
+                    self.window = QWidget()
+                    self.window.setWindowIcon(QtGui.QIcon(':/icon/yish.ico'))
+                    cust_code, ok_pressed = QInputDialog.getText(
+                        self.window, "手动输入验证码", "请输入验证码:")
+                    if ok_pressed and cust_code:
+                        code = cust_code
+                    else:
+                        self.show_warning("请输入验证码！")
+                        return
+                except Exception as e:
+                    self.show_warning(f"无法获取验证码: {e}")
+                    return
+
+            pub_key = rsa.PublicKey.load_pkcs1_openssl_pem(rsa_public_key.encode())
+
+            # 登录数据
+            login_data = {
+                "userName": username,
+                "password": password,
+                "rand": code
+            }
+
+            login_key = self.encrypt_rsa(json.dumps(login_data), pub_key)
+            # 构造请求头和Cookie
+            headers = {
+                "Origin": f"http://{esurfingurl}",
+                "Referer": f"http://{esurfingurl}/qs/index_gz.jsp?wlanacip={wlanacip}&wlanuserip={wlanuserip}",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
+            }
+
+            # 构造请求参数
+            post_data = {
+                'loginKey': login_key,
+                'wlanuserip': wlanuserip,
+                'wlanacip': wlanacip
+            }
+
+            # 发送POST请求
+            try:
+                response = session.post(
+                    f'http://{esurfingurl}/ajax/login', timeout=3, headers=headers, data=post_data)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data['resultCode'] == "0" or data['resultCode'] == "13002000":
+                        signature = response.cookies["signature"]
+                        self.update_table("成功连接校园网！")
+                        connected = True
+
+                        self.check_new_version()
+
+                        if watch_dog_thread_started != True:
+                            stop_watch_dog = False
+                            self.watchdog_thread = watch_dog()
+                            self.watchdog_thread.signals.update_progress.connect(
+                                self.update_progress_bar)
+                            self.watchdog_thread.signals.print_text.connect(
+                                self.update_table)
+                            self.watchdog_thread.signals.thread_login.connect(
+                                self.login)
+                            self.threadpool.start(self.watchdog_thread)
+                        if self.checkBox.isChecked():
+                            encrypted_password = ''.join(
+                                chr(ord(char) + 10) for char in password)
+                            self.update_config("password", encrypted_password)
+                        self.update_config("username", username)
+                    elif data['resultCode'] == "13018000":
+                        self.update_table("已办理一人一号多终端业务的用户，请使用客户端登录")
+                    else:
+                        self.update_table(f"登录失败: {data['resultInfo']}")
+                        if data['resultInfo'] == "验证码错误":
+                            if mode == "mulit":
                                 pass
-            else:
-                print("请求失败，状态码：", response.status_code)
-        except Exception as e:
-            print(f"登录请求失败，请先获取配置并确保配置正确：{e}")
-            connected = True
-            self.run_settings()
+                            else:
+                                try:
+                                    if retry_thread_started == False:
+                                        connected = False
+                                        self.update_table("验证码识别错误，即将重试...")
+                                        self.thread = login_Thread(5)
+                                        self.thread.signals.enable_buttoms.connect(
+                                            self.enable_buttoms)
+                                        self.thread.signals.show_input_dialog1.connect(
+                                            self.show_input_dialog)
+                                        self.thread.signals.thread_login.connect(
+                                            self.login)
+                                        self.thread.signals.print_text.connect(
+                                            self.update_table)
+                                        self.thread.signals.finished.connect(
+                                            lambda: self.update_table("结束线程"))
+                                        self.threadpool.start(self.thread)
+                                        retry_thread_started = True
+                                except:
+                                    pass
+                else:
+                    self.update_table(f"请求失败，状态码：{response.status_code}")
+            except Exception as e:
+                self.update_table(f"登录请求失败，请先获取配置并确保配置正确：{e}")
+                connected = True
+                self.run_settings()
 
-        login_thread_finished = True
+            login_thread_finished = True
+        except Exception as e:
+            self.show_warning(f"登录过程中发生错误：{e}")
 
     def login_jar(self, username, password, userip, acip):
         self.enable_buttoms(0)
@@ -593,7 +647,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.save_password)
             self.threadpool.start(self.jar_Thread)
         except Exception as e:
-            print(f"登录失败：{e}")
+            self.update_table(f"登录失败：{e}")
             self.enable_buttoms(1)
 
     def save_password(self):
@@ -625,18 +679,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 if response.status_code == 200:
                     data = response.json()
-                    print("成功发送下线请求")
+                    self.update_table("成功发送下线请求")
                     if data['resultCode'] == "0" or data['resultCode'] == "13002000":
                         stop_watch_dog = True
-                        print("下线成功")
+                        self.update_table("下线成功")
                     else:
-                        print(f"下线失败: {data['resultInfo']}")
+                        self.update_table(f"下线失败: {data['resultInfo']}")
                 else:
-                    print("请求失败，状态码：", response.status_code)
+                    self.update_table(f"请求失败，状态码：{response.status_code}")
             except Exception as e:
-                print(f"下线失败：{e}")
+                self.update_table(f"下线失败：{e}")
         else:
-            print("您尚未登录，无需下线！")
+            self.update_table("您尚未登录，无需下线！")
 
     def enable_buttoms(self, mode):
         if mode == 0:
@@ -662,8 +716,29 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.progressBar.hide()
 
     def update_table(self, text):
-        self.listWidget.addItem(text)
-        self.listWidget.setCurrentRow(self.listWidget.count() - 1)
+        if text == self.log_message and self.log_count < 3:
+            self.log_count += 1
+            self.listWidget.addItem(text)
+            self.listWidget.setCurrentRow(self.listWidget.count() - 1)
+        elif text == self.log_message and self.log_count >= 3:
+            self.log_count = 0
+            self.show_log_alert(text)
+        else:
+            self.log_count = 1
+            self.log_message = text
+            self.listWidget.addItem(text)
+            self.listWidget.setCurrentRow(self.listWidget.count() - 1)
+
+    def show_log_alert(self, message):
+        msgBox = QMessageBox()
+        msgBox.setWindowTitle("日志提醒")
+        msgBox.setText(message)
+        msgBox.setWindowIcon(QtGui.QIcon(':/icon/yish.ico'))
+        okButton = msgBox.addButton("确定", QMessageBox.AcceptRole)
+        msgBox.exec_()
+        clickedButton = msgBox.clickedButton()
+        if clickedButton == okButton:
+            pass  # 用户点击确定后不再输出对应的日志
 
     def check_new_version(self):
         self.update_thread = UpdateThread()
@@ -689,6 +764,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             os.system("start https://cmxz.top/SAC")
         else:
             self.update_table("检测到新版本！")
+
+
+
 
 
 class WorkerSignals(QObject):
