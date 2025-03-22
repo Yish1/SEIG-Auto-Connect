@@ -6,6 +6,9 @@ import org.apache.commons.cli.*
 import org.apache.commons.cli.Options
 import org.apache.log4j.Logger
 import kotlin.system.exitProcess
+import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 object DialerApp {
 
@@ -68,29 +71,41 @@ object DialerApp {
                 cmd.getOptionValue("userIp"),
                 cmd.getOptionValue("acIp"),
                 cmd.getOptionValue("sms") ?: "",
-                )
+            )
         )
 
-        Runtime.getRuntime().addShutdownHook(object : Thread() {
-            override fun run() {
-                try {
-                    if (isRunning) {
-                        isRunning = false
-                    }
-                    if (Session.isInitialized()) {
-                        if (States.isLogged){
-                            client.term()
-                        }
-                        Session.free()
-                    }
-                    println("Shutting down...")
-                } catch (e: InterruptedException) {
-                    currentThread().interrupt()
-                    e.printStackTrace()
-                }
+        // 启动后台线程，每 5 秒检查一次 logout.signal
+        val scheduler = Executors.newScheduledThreadPool(1)
+
+        scheduler.scheduleAtFixedRate({
+            val logoutFile = File("logout.signal")
+            if (logoutFile.exists()) {
+                println("下线中...")
+                triggerShutdown(client)
+                scheduler.shutdown() // 任务完成后停止调度器
             }
-        })
+        }, 0, 5, TimeUnit.SECONDS)
+
         States.refreshStates()
         client.run()
+    }
+
+    private fun triggerShutdown(client: Client) {
+        try {
+            if (isRunning) {
+                isRunning = false
+            }
+            if (Session.isInitialized()) {
+                if (States.isLogged) {
+                    client.term()
+                }
+                Session.free()
+            }
+            println("下线成功！")
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            e.printStackTrace()
+        }
+        exitProcess(0) // 退出程序
     }
 }
