@@ -6,7 +6,6 @@ import requests
 import rsa
 import json
 import time
-import random
 import win32com.client
 import msvcrt
 # import debugpy
@@ -27,7 +26,7 @@ from settings import Ui_sac_settings
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
-version = 1.01
+version = 1.1
 username = None
 password = None
 esurfingurl = None
@@ -95,10 +94,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.threadpool = QThreadPool()
 
         # 重写print
-        global_print = builtins.print
+        self.global_print = builtins.print
 
         def print(*args, **kwargs):
-            global_print(*args, **kwargs)
+            self.global_print(*args, **kwargs)
             text = " ".join(map(str, args))
             try:
                 self.listWidget.addItem(text)
@@ -466,7 +465,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         print("即将登录: " + username + " IP: " + wlanuserip)
 
         if not username.startswith('t'):  # 判断是否以 't' 开头，仅适用于广州软件学院
-            
             self.login_jar(username, password, wlanuserip, wlanacip)
             jar_login = True
             return
@@ -606,7 +604,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         global stop_watch_dog, jar_login
         username = self.lineEdit.text()
         if jar_login:
-            jar_Thread.terminate_all_processes()
+            if not os.path.exists('logout.signal'):
+                with open('logout.signal', 'w', encoding='utf-8') as file:
+                    file.write("")
+            jar_Thread.term_all_processes()
+            print("执行下线操作中, 请稍后...")
             jar_login = False
             return
 
@@ -662,8 +664,13 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.progressBar.hide()
 
     def update_table(self, text):
+        # 超过 150 行，就清空列表
+        if self.listWidget.count() >= 150:
+            self.listWidget.clear()
+
         self.listWidget.addItem(text)
         self.listWidget.setCurrentRow(self.listWidget.count() - 1)
+        self.global_print(text)
 
     def check_new_version(self):
         self.update_thread = UpdateThread()
@@ -792,17 +799,6 @@ class jar_Thread(QRunnable):
             jar_Thread.lock.unlock()  # 解锁
 
             self.signals.print_text.emit(f"进程 {pid} 启动成功！")
-
-            heartbeat_messages = [
-                "『你所期望的未来，正缓缓展开』",
-                "『一旦开始，便无法停止！』心跳信号已准备就绪！",
-                "『就算世界与我为敌，我也要守护这份连接！』心跳已启动！",
-                "『我将跨越时空，为你传递这份心跳！』",
-                "『超电磁炮已充能完毕！』心跳信号启动！",
-                "『心跳的频率，正与你的IP地址合奏成旋律。』",
-                "『只要心跳仍在，我们就不会掉线。』",
-            ]
-
             # 处理子进程的输出
             def read_output():
                 global connected, login_thread_finished
@@ -812,15 +808,20 @@ class jar_Thread(QRunnable):
                         self.signals.print_text.emit(
                             f"{pid}: {output.strip()}")
 
+                        if "The network has been connected" in output:
+                            jar_Thread.term_all_processes(pid)  # 终止当前进程
+                            self.signals.print_text.emit(
+                                f"{pid}: 当前设备已连接互联网，无需再次登录\n如果没有使用此工具登录\n将不能使用此工具的下线功能\n请使用天翼校园网手动下线，或等待8分钟")
+                            self.signals.update_check.emit()
+                            self.signals.enable_buttoms.emit(1)
+
                         if "The login has been authorized" in output:
                             self.signals.connected_success.emit()
                             self.signals.enable_buttoms.emit(1)
                             connected = True
                             self.signals.print_text.emit(
                                 f"{pid}: 登录成功！即将发送心跳... :)")
-                            # 发送随机心跳消息
-                            message = random.choice(heartbeat_messages)
-                            self.signals.print_text.emit(f"{pid}:{message}")
+                            self.signals.print_text.emit(f"{pid}:『只要心跳仍在，我们就不会掉线』")
                             # 发送保存密码信号
                             self.signals.jar_login_success.emit()
 
@@ -829,7 +830,7 @@ class jar_Thread(QRunnable):
                             self.signals.update_check.emit()
 
                         if "KeepUrl is empty" in output:
-                            jar_Thread.terminate_all_processes(pid)  # 终止当前进程
+                            jar_Thread.term_all_processes(pid)
                             self.signals.print_text.emit(
                                 f"{pid}: 登录失败，账号或密码错误！")
                             # self.signals.update_check.emit()
@@ -853,37 +854,43 @@ class jar_Thread(QRunnable):
         self.signals.finished.emit()
 
     @staticmethod
-    def terminate_all_processes(pid=None):
-        global login_thread_finished
-        """终止特定进程或所有进程"""
-        jar_Thread.lock.lock()  # 手动上锁
-        try:
-            if pid is None:
-                # 终止所有进程
-                for process in jar_Thread.processes:
-                    try:
-                        process.terminate()
-                        process.wait()
-                        print(f"进程 {process.pid} 已终止。")
-                    except Exception as e:
-                        print(f"终止进程 {process.pid} 时出错: {str(e)}")
-                jar_Thread.processes.clear()
-            else:
-                # 终止特定进程
-                for process in jar_Thread.processes[:]:
-                    if process.pid == pid:
+    def term_all_processes(pid=None):
+        def term_jar():
+            global login_thread_finished
+            jar_Thread.lock.lock()  # 手动上锁
+            try:
+                if pid is None:
+                    # 终止所有进程
+                    for process in jar_Thread.processes:
                         try:
                             process.terminate()
                             process.wait()
-                            print(f"进程 {pid} 已终止。")
-                            jar_Thread.processes.remove(process)
+                            print(f"进程 {process.pid} 已终止。")
                         except Exception as e:
-                            print(f"终止进程 {pid} 时出错: {str(e)}")
-                        break  # 找到并终止后即可退出循环
-        finally:
-            jar_Thread.lock.unlock()  # 释放锁
-            login_thread_finished = True
+                            print(f"终止进程 {process.pid} 时出错: {str(e)}")
+                    jar_Thread.processes.clear()
+                else:
+                    # 终止特定进程
+                    for process in jar_Thread.processes[:]:
+                        if process.pid == pid:
+                            try:
+                                process.terminate()
+                                process.wait()
+                                print(f"进程 {pid} 已终止。")
+                                jar_Thread.processes.remove(process)
+                            except Exception as e:
+                                print(f"终止进程 {pid} 时出错: {str(e)}")
+                            break  # 找到并终止后即可退出循环
+            finally:
+                jar_Thread.lock.unlock()
+                login_thread_finished = True
+                try:
+                    os.remove("logout.signal")
+                except FileNotFoundError:
+                    pass
 
+        # 延迟 5.5 秒执行
+        QTimer.singleShot(5500, term_jar)
 
 class watch_dog(QRunnable):
     def __init__(self):
@@ -1242,18 +1249,6 @@ class UpdateThread(QRunnable):
 
         if new_version_checked == True:
             return
-        
-        try:
-            is_enable = requests.get(
-                updatecheck + "?enable", timeout=5, headers=headers)
-            is_enable = int(is_enable.text)
-
-            if is_enable == 0:
-                self.signals.show_message.emit("当前版本已被停用，请及时更新！", "警告")
-                self.signals.logout.emit()
-                return
-        except:
-            pass
 
         try:
             page = requests.get(updatecheck, timeout=5, headers=headers)
@@ -1268,10 +1263,22 @@ class UpdateThread(QRunnable):
                 new_version_detail = new_version_detail.text
                 self.signals.show_message.emit("云端最新版本: %s<br>当前版本: %s<br><br>%s" % (
                     newversion, version, new_version_detail), findnewversion)
-            new_version_checked = True
                         
         except Exception as e:
             self.signals.print_text.emit(f"CMXZ_API_CHECK_UPDATE_ERROR: {e}")
+
+        try:
+            is_enable = requests.get(
+                updatecheck + "?enable", timeout=5, headers=headers)
+            is_enable = int(is_enable.text)
+            new_version_checked = True
+
+            if is_enable == 0:
+                self.signals.show_message.emit("当前版本已被停用，请及时更新！", "警告")
+                self.signals.logout.emit()
+                return
+        except:
+            pass
 
         self.signals.finished.emit()
 
