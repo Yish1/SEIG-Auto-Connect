@@ -452,8 +452,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             password = pwd
             wlanuserip = ip
 
-        print("即将登录: " + username + " IP: " + wlanuserip)
-
         if esurfingurl == "0.0.0.0:0" or esurfingurl == "自动获取失败,请检查网线连接":
             self.run_settings()
             print("请先获取或手动填写参数！")
@@ -464,6 +462,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if not password or password == "0":
             print("请输入密码")
             return
+        
+        print("即将登录: " + username + " IP: " + wlanuserip)
 
         if not username.startswith('t'):  # 判断是否以 't' 开头，仅适用于广州软件学院
             
