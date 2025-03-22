@@ -580,6 +580,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def login_jar(self, username, password, userip, acip):
         self.enable_buttoms(0)
         try:
+            os.remove("logout.signal")
+        except:
+            pass
+        try:
             self.jar_Thread = jar_Thread(username, password, userip, acip)
             self.jar_Thread.signals.enable_buttoms.connect(self.enable_buttoms)
             # self.jar_Thread.signals.connected_success.connect(
@@ -1319,3 +1323,4 @@ if __name__ == "__main__":
         user32 = ctypes.windll.user32
         user32.MessageBoxW(None, f"程序启动时遇到严重错误:{e}", "Warning!", 0x30)
         sys.exit()
+# 编译指令nuitka --standalone --lto=yes --msvc=latest --disable-ccache --windows-console-mode=disable --enable-plugin=pyqt5,upx --upx-binary=F:\Programs\upx\upx.exe --output-dir=SAC --windows-uac-admin  --windows-icon-from-ico=yish.ico --nofollow-import-to=unittest main.py 
