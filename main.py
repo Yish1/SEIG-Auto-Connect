@@ -26,7 +26,7 @@ from settings import Ui_sac_settings
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
-version = 1.2
+version = 1.21
 username = None
 password = None
 esurfingurl = None
@@ -169,6 +169,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             msg_box.exec_()
 
             if msg_box.clickedButton() == btn_minimize:
+                if settings_flag != None:
+                    print("请先关闭设置界面再最小化！")
+                    event.ignore()
+                    return
                 event.ignore()  # 最小化到托盘
                 self.hide()  # 隐藏窗口
                 self.tray_icon.showMessage(
