@@ -924,9 +924,11 @@ class jar_Thread(QRunnable):
                     os.remove("logout.signal")
                 except FileNotFoundError:
                     pass
-
-        # 延迟 5.5 秒执行
-        QTimer.singleShot(5500, term_jar)
+        if pid:
+            term_jar()
+        else:
+            # 延迟 5.5 秒执行
+            QTimer.singleShot(5500, term_jar)
 
 class watch_dog(QRunnable):
     def __init__(self):
