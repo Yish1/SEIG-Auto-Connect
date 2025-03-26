@@ -84,9 +84,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         tray_menu = QMenu(self)
         restore_action = QAction("恢复", self)
         quit_action = QAction("退出", self)
-
+        self.close_now = False
         restore_action.triggered.connect(self.showNormal)
-        quit_action.triggered.connect(self.close)
+        quit_action.triggered.connect(lambda: (setattr(self, 'close_now', True), self.close()))
 
         tray_menu.addAction(restore_action)
         tray_menu.addAction(quit_action)
@@ -157,36 +157,37 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def closeEvent(self, event):
         global stop_watch_dog
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("退出确认")
-        msg_box.setText("您需要退出程序 还是最小化到托盘？")
-        msg_box.setIcon(QMessageBox.Question)
+        if self.close_now == False:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("退出确认")
+            msg_box.setText("您需要退出程序 还是最小化到托盘？")
+            msg_box.setIcon(QMessageBox.Question)
 
-        btn_quit = msg_box.addButton("退出", QMessageBox.YesRole)
-        btn_minimize = msg_box.addButton("最小化到托盘", QMessageBox.NoRole)
+            btn_quit = msg_box.addButton("退出", QMessageBox.YesRole)
+            btn_minimize = msg_box.addButton("最小化到托盘", QMessageBox.NoRole)
 
-        msg_box.exec_()
+            msg_box.exec_()
 
-        if msg_box.clickedButton() == btn_quit:
-            # 关闭其他窗口的代码
-            try:
-                for widget in QApplication.topLevelWidgets():
-                    if isinstance(widget, QWidget) and widget != self:
-                        widget.close()
-            except:
-                pass
-            stop_watch_dog = True
-            event.accept()
+            if msg_box.clickedButton() == btn_minimize:
+                event.ignore()  # 最小化到托盘
+                self.hide()  # 隐藏窗口
+                self.tray_icon.showMessage(
+                    f"SEIG虚空终端{version}",
+                    "程序已最小化到托盘",
+                    QSystemTrayIcon.Information,
+                    2000
+                )
+                return
 
-        else:
-            event.ignore()  # 最小化到托盘
-            self.hide()  # 隐藏窗口
-            self.tray_icon.showMessage(
-                f"SEIG虚空终端{version}",
-                "程序已最小化到托盘",
-                QSystemTrayIcon.Information,
-                2000
-            )
+        # 关闭其他窗口的代码
+        try:
+            for widget in QApplication.topLevelWidgets():
+                if isinstance(widget, QWidget) and widget != self:
+                    widget.close()
+        except:
+            pass
+        stop_watch_dog = True
+        event.accept()
     def init_save_password(self):
         if save_pwd == "1":
             decrypted_password = ''.join(
