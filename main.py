@@ -26,7 +26,7 @@ from settings import Ui_sac_settings
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
-version = 1.1
+version = 1.2
 username = None
 password = None
 esurfingurl = None
@@ -76,6 +76,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         self.tray_icon = QSystemTrayIcon(QtGui.QIcon(':/icon/yish.ico'), self)
         self.tray_icon.setToolTip(f"SEIG虚空终端{version}")
+        # 连接单击托盘图标的事件
+        self.tray_icon.activated.connect(self.on_tray_icon_clicked)
+
 
         # 托盘菜单
         tray_menu = QMenu(self)
@@ -84,7 +87,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         restore_action.triggered.connect(self.showNormal)
         quit_action.triggered.connect(self.close)
-        # self.tray_icon.activated.connect(lambda:self.showNormal() or self.activateWindow())
 
         tray_menu.addAction(restore_action)
         tray_menu.addAction(quit_action)
@@ -131,11 +133,16 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.run_settings_action.triggered.connect(self.run_settings)
         print("感谢您使用此工具！\n请不要在任何大型社交平台\n(B站、贴吧、小红书、狐友等)\n讨论此工具！")
 
+    def on_tray_icon_clicked(self, reason):
+        if reason == QSystemTrayIcon.Trigger:  # 仅响应左键单击
+            self.showNormal()
+            self.activateWindow()
+            
     def changeEvent(self, event):
         if event.type() == QtCore.QEvent.WindowStateChange:
             if self.isMinimized():
                 if settings_flag != None:
-                    print("请先关闭设置界面再最小化！不然有bug，问就是懒得修")
+                    print("请先关闭设置界面再最小化！")
                     self.showNormal()
                     return
                 else:
@@ -150,16 +157,36 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def closeEvent(self, event):
         global stop_watch_dog
-        # 关闭其他窗口的代码
-        try:
-            for widget in QApplication.topLevelWidgets():
-                if isinstance(widget, QWidget) and widget != self:
-                    widget.close()
-        except:
-            pass
-        stop_watch_dog = True
-        event.accept()
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("退出确认")
+        msg_box.setText("您需要退出程序 还是最小化到托盘？")
+        msg_box.setIcon(QMessageBox.Question)
 
+        btn_quit = msg_box.addButton("退出", QMessageBox.YesRole)
+        btn_minimize = msg_box.addButton("最小化到托盘", QMessageBox.NoRole)
+
+        msg_box.exec_()
+
+        if msg_box.clickedButton() == btn_quit:
+            # 关闭其他窗口的代码
+            try:
+                for widget in QApplication.topLevelWidgets():
+                    if isinstance(widget, QWidget) and widget != self:
+                        widget.close()
+            except:
+                pass
+            stop_watch_dog = True
+            event.accept()
+
+        else:
+            event.ignore()  # 最小化到托盘
+            self.hide()  # 隐藏窗口
+            self.tray_icon.showMessage(
+                f"SEIG虚空终端{version}",
+                "程序已最小化到托盘",
+                QSystemTrayIcon.Information,
+                2000
+            )
     def init_save_password(self):
         if save_pwd == "1":
             decrypted_password = ''.join(
