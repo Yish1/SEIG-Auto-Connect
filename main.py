@@ -26,7 +26,7 @@ from settings import Ui_sac_settings
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
-version = 1.21
+version = 1.22
 username = None
 password = None
 esurfingurl = None
