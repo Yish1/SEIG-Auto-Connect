@@ -41,7 +41,8 @@
 - [x] 支持更多类型账号登录(1.0已实现...) 
       
 ## 下载链接
-> https://github.com/Yish1/SEIG-Auto-Connect/releases
+> https://github.com/Yish1/SEIG-Auto-Connect/releases<br>
+> 国内网盘：https://www.123865.com/s/8ks9jv-xSJzH?提取码:seig
 ## 界面图片
 > 主界面<br>
 ![49c00fe212deeb7918d62e90cdda5415](https://github.com/user-attachments/assets/6b11042f-811d-4aae-a2d0-822faccc5daa)<br>
