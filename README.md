@@ -1,4 +1,4 @@
-[中文](./README.md) | English
+[中文](./README_CN.md) | English
 <div align="center">
 <a><img src="./Class-Roster-Picker.png" width="180" height="180" alt="Class-Roster-Picker"></a>
 </div>
