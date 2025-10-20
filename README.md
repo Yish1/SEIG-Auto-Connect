@@ -1,7 +1,4 @@
 [中文](./README_CN.md) | English
-<div align="center">
-<a><img src="./Class-Roster-Picker.png" width="180" height="180" alt="Class-Roster-Picker"></a>
-</div>
 
 <div align="center">
 # SEIG-Auto-Connect
