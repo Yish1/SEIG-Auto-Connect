@@ -10,7 +10,7 @@ from models import state
 
 
 class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):
-    def __init__(self, main_instance=None):
+    def __init__(self, main_window=None):
         super().__init__()
         central_widget = QtWidgets.QWidget(self)
         self.setCentralWidget(central_widget)
@@ -21,7 +21,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):
 
         self.label_4.hide()
 
-        self.main_instance = main_instance
+        self.main_window = main_window
         self.esurfingurl = state.esurfingurl
         self.wlanacip = state.wlanacip
         self.wlanuserip = state.wlanuserip
@@ -47,13 +47,13 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):
 
         if reply == QMessageBox.Yes:
             try:
-                if os.path.exists(self.main_instance.config_path):
-                    os.remove(self.main_instance.config_path)
-                self.main_instance.read_config()
+                if os.path.exists(self.main_window.config_path):
+                    os.remove(self.main_window.config_path)
+                self.main_window.read_config()
                 self.get_config_value()
-                self.main_instance.radioButton_2.setChecked(True)
-                self.main_instance.lineEdit.setText("")
-                self.main_instance.lineEdit_2.setText("")
+                self.main_window.radioButton_2.setChecked(True)
+                self.main_window.lineEdit.setText("")
+                self.main_window.lineEdit_2.setText("")
                 self.show_message("配置已清除并恢复默认值！", "成功")
             except Exception as e:
                 self.show_message(f"清除配置失败: {e}", "错误")
@@ -95,7 +95,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):
         elif mode == "add":
             add_new_tab_func()
             state.mulit_login += 1
-            self.main_instance.update_config("mulit_login", state.mulit_login)
+            self.main_window.update_config("mulit_login", state.mulit_login)
 
     def del_tab(self):
         latest_index = self.tabWidget_2.count() - 1
@@ -103,9 +103,9 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):
         if latest_index > 0:
             self.tabWidget_2.removeTab(latest_index)
             state.mulit_login -= 1
-            self.main_instance.update_config("mulit_login", state.mulit_login)
+            self.main_window.update_config("mulit_login", state.mulit_login)
             for i in range(3):
-                self.main_instance.update_config(f"line_edit_{state.mulit_login}_{i + 1}", "")
+                self.main_window.update_config(f"line_edit_{state.mulit_login}_{i + 1}", "")
         else:
             QMessageBox.warning(self, "警告", "必须保留一个配置项")
 
@@ -155,10 +155,10 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):
     def read_config(self, le_name, mode=None):
         mconfig = {}
 
-        if not os.path.exists(self.main_instance.config_path):
-            self.main_instance.read_config()
+        if not os.path.exists(self.main_window.config_path):
+            self.main_window.read_config()
 
-        with open(self.main_instance.config_path, 'r', encoding='utf-8') as file:
+        with open(self.main_window.config_path, 'r', encoding='utf-8') as file:
             for line in file:
                 if '=' in line:
                     key, value = line.strip().split('=', 1)
@@ -186,12 +186,15 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):
     def on_text_changed(self, line_edit, text):
         if line_edit.objectName().split('_')[3] == "3":
             encrypted_password = ''.join(chr(ord(char) + 10) for char in text)
-            self.main_instance.update_config(line_edit.objectName(), encrypted_password)
+            self.main_window.update_config(line_edit.objectName(), encrypted_password)
             return
-        self.main_instance.update_config(line_edit.objectName(), text)
+        self.main_window.update_config(line_edit.objectName(), text)
 
     def mulit_login_now(self):
         state.mulit_info = {}
+        # 初始化汇总结果容器
+        self.mulit_summary = {}
+        self.is_mulit_running = True
         a = self.read_config("")
 
         def login_task(key):
@@ -200,7 +203,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):
             pwd = state.mulit_info[key].get('3', '')
 
             if ip != '' and user != '' and pwd != '':
-                self.main_instance.mulit_login_mode(ip, user, pwd)
+                self.main_window.mulit_login_mode(ip, user, pwd)
             else:
                 self.stop_flag = True
                 self.show_message("存在为空的登录配置，请完善或删除！", "提示")
@@ -217,23 +220,38 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):
                     return
 
                 if index < len(state.mulit_info) - 1:
-                    QTimer.singleShot(500, lambda: start_login(index + 1))
-
-                elif index == len(state.mulit_info) - 1:
-                    print(f"多拨线程执行完毕，共多拨 {len(state.mulit_info)} 次")
-
+                    QTimer.singleShot(200, lambda: start_login(index + 1))
+                    
         start_login()
+
+    def add_mulit_summary(self, ip, success, message):
+        try:
+            self.mulit_summary[ip] = (success, message)
+            # 当汇总数达到配置数时，统一打印汇总（仅在多拨过程中）
+            if getattr(self, 'is_mulit_running', False) and len(self.mulit_summary) >= len(state.mulit_info):
+                lines = []
+                for ip_key in self.mulit_summary:
+                    ok, msg = self.mulit_summary[ip_key]
+                    if ok:
+                        lines.append(f"{ip_key}: 成功登录")
+                    else:
+                        lines.append(f"{ip_key}: 登录失败，{msg}")
+                summary = "\n".join(lines)
+                print(summary)
+                # 结束多拨标记，避免非多拨打印
+                self.is_mulit_running = False
+        except Exception as e:
+            print(f"汇总结果打印失败: {e}")
 
     def get_config_value(self):
         # 直接从全局state读取，保证与当前配置一致
         self.lineEdit.setText(state.esurfingurl or "")
         self.lineEdit_2.setText(state.wlanacip or "")
         self.lineEdit_3.setText(state.wlanuserip or "")
-
     def save_config(self):
-        self.main_instance.update_config("esurfingurl", self.lineEdit.text())
-        self.main_instance.update_config("wlanacip", self.lineEdit_2.text())
-        self.main_instance.update_config("wlanuserip", self.lineEdit_3.text())
+        self.main_window.update_config("esurfingurl", self.lineEdit.text())
+        self.main_window.update_config("wlanacip", self.lineEdit_2.text())
+        self.main_window.update_config("wlanuserip", self.lineEdit_3.text())
         self.close()
 
     def get_default(self):

@@ -113,12 +113,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.pushButton_2.clicked.connect(self.logout)
         self.checkBox.clicked.connect(lambda: self.update_config(
             "save_pwd", 1 if self.checkBox.isChecked() else 0))
-        self.checkBox_2.clicked.connect(lambda: self.update_config(
-            "auto_connect", 1 if self.checkBox_2.isChecked() else 0) or (
-                print("开机将自启，并自动登录，需要记住密码\n看门狗每10分钟检测一次网络连接情况\n下次自动登录成功时，将启动看门狗") if self.checkBox_2.isChecked() else None) or (
-                self.checkBox.setChecked(True) if self.checkBox_2.isChecked() else None) or (
-                    self.add_to_startup() if self.checkBox_2.isChecked() else self.add_to_startup(1)) or (self.update_config("save_pwd", 1))
-        )
+        self.checkBox_2.clicked.connect(self.on_auto_connect_clicked)
 
         self.pushButton_3.clicked.connect(
             lambda: web.open_new("https://cmxz.top"))
@@ -237,14 +232,13 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 return
             
             try:
-                self.auto_thread = login_Thread(5)
+                self.auto_thread = login_Thread(5, self)
                 self.auto_thread.signals.enable_buttoms.connect(self.enable_buttoms)
                 self.auto_thread.signals.show_input_dialog1.connect(self.show_input_dialog)
                 self.auto_thread.signals.thread_login.connect(lambda: self.start_login_worker())
                 self.auto_thread.signals.finished.connect(lambda: print("结束自动登录线程"))
                 self.threadpool.start(self.auto_thread)
                 state.retry_thread_started = True
-                self.add_to_startup()
             except Exception as e:
                 print(e)
         else:
@@ -255,21 +249,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.login("mulit", ip, user, pwd)
         except Exception as e:
             print(e)
-        # try:
-        # self.threadpool = QThreadPool()
-        # self.auto_thread = login_Thread(2)
-        # self.auto_thread.signals.enable_buttoms.connect(
-        #     self.enable_buttoms)
-        # self.auto_thread.signals.show_input_dialog1.connect(
-        #     self.show_input_dialog)
-        # self.auto_thread.signals.thread_login.connect(lambda:self.login("mulit", ip, user, pwd))
-        # self.auto_thread.signals.finished.connect(
-        #     lambda: print("结束线程"))
-        # self.threadpool.start(self.auto_thread)
-        # retry_thread_started = True
-            # self.add_to_startup()
-        # except Exception as e:
-        #     print(e)
 
     def run_settings(self):
         # 显示已创建的设置窗口，若不存在则创建；若已打开则聚焦
@@ -372,7 +351,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             return None, None
 
     def login(self, mode=None, ip=None, user=None, pwd=None):
-        # 手动模式仍在主线程处理（需要弹窗交互）
+        # 手动按钮登录仍在主线程处理
         if mode == 1:
             state.username = self.lineEdit.text()
             self.update_config("username", state.username)
@@ -484,9 +463,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 else:
                     print(f"登录失败: {data['resultInfo']}")
 
-                    if data['resultInfo'] == "用户认证失败":
+                    if data['resultInfo'] == "用户认证失败" or "密码错误" in data['resultInfo']:
                         print("用户名或密码错误，请重新输入！")
                         self.thread_stop_flag = True
+                        state.retry_thread_started = False
                         return
 
                     if data['resultInfo'] == "验证码错误":
@@ -559,6 +539,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     file.write("")
             jar_Thread.term_all_processes()
             print("执行下线操作中, 请稍后...")
+            state.stop_watch_dog = True
             state.jar_login = False
             return
 
@@ -593,6 +574,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def start_login_worker(self, mode=None, ip=None, user=None, pwd=None):
         """在后台启动 LoginWorker，并绑定结果回调。"""
         try:
+            if getattr(self, 'thread_stop_flag', False):
+                return
             # 根据模式和账号前缀决定走 jar 还是网页登录
             u = user or state.username
             p = pwd or state.password
@@ -637,6 +620,24 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.update_config("username", state.username)
         else:
             print(f"登录失败: {result.get('message')}")
+            # 密码错误则停止自动重试
+            msg = str(result.get('message') or '')
+            if ('用户认证失败' in msg) or ('账号或密码错误' in msg) or ('密码错误' in msg):
+                print("检测到密码错误，停止自动重试")
+                self.thread_stop_flag = True
+                state.retry_thread_started = False
+
+        # 汇总多拨结果（仅在多拨流程中）
+        if hasattr(self, 'settings_window') and self.settings_window:
+            if getattr(self.settings_window, 'is_mulit_running', False):
+                ip = result.get('userip') or state.wlanuserip
+                success = bool(result.get('success'))
+                message = result.get('message') or ('登录成功' if success else '登录失败')
+                if hasattr(self.settings_window, 'add_mulit_summary'):
+                    self.settings_window.add_mulit_summary(ip, success, message)
+
+        # 标记登录步骤完成，便于顺序控制
+        state.login_thread_finished = True
 
     def enable_buttoms(self, mode):
         if mode == 0:
@@ -705,6 +706,24 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             state.login_mode = 1
             self.update_config("login_mode", "1")
 
+    def on_auto_connect_clicked(self):
+        is_checked = self.checkBox_2.isChecked()
+        
+        # 更新自动登录配置
+        self.update_config("auto_connect", 1 if is_checked else 0)
+        
+        if is_checked:
+            # 勾选时的操作
+            print("开机将自启,并自动登录,需要记住密码\n"
+                "看门狗每10分钟检测一次网络连接情况\n"
+                "下次自动登录成功时,将启动看门狗")
+            self.checkBox.setChecked(True)  # 自动勾选记住密码
+            self.add_to_startup()  # 添加开机自启
+        else:
+            self.add_to_startup(1)  # 移除开机自启
+        
+        # 强制保存密码
+        self.update_config("save_pwd", 1)
 
 
 if __name__ == "__main__":

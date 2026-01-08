@@ -31,11 +31,22 @@ class login_Thread(QRunnable):
         super().__init__()
         self.signals = WorkerSignals()
         self.times = times
+        self.main_window = parent
 
     def run(self):
         self.signals.enable_buttoms.emit(0)
 
         while self.times > 0:
+            # 检测外部停止标记（例如密码错误后停止重试）
+            try:
+                if self.main_window is not None and getattr(self.main_window, 'thread_stop_flag', False):
+                    self.signals.print_text.emit("密码错误，停止自动重试")
+                    state.retry_thread_started = False
+                    self.signals.enable_buttoms.emit(1)
+                    self.signals.finished.emit()
+                    return
+            except Exception:
+                pass
             time.sleep(3)
             if state.connected == True:
                 state.retry_thread_started = False
@@ -127,7 +138,8 @@ class LoginWorker(QRunnable):
         except Exception as e:
             result['message'] = str(e)
 
-        # 发出结果
+        # 附带用户IP信息，发出结果
+        result['userip'] = self.userip
         self.signals.login_result.emit(result)
 
 
@@ -206,6 +218,10 @@ class jar_Thread(QRunnable):
                             self.signals.print_text.emit(f"{pid}: 登录成功！即将发送心跳... :)")
                             self.signals.print_text.emit(f"{pid}:『只要心跳仍在，我们就不会掉线』")
                             self.signals.jar_login_success.emit()
+                            try:
+                                self.signals.login_result.emit({"success": True, "message": "登录成功", "userip": self.userip})
+                            except Exception:
+                                pass
 
                         if "Send Keep Packet" in output:
                             self.signals.print_text.emit(f"{pid}: 心跳成功，请不要关闭此程序，\n需要每480秒心跳保持连接！")
@@ -215,6 +231,10 @@ class jar_Thread(QRunnable):
                             jar_Thread.term_all_processes(pid)
                             self.signals.print_text.emit(f"{pid}: 登录失败，账号或密码错误！")
                             self.signals.enable_buttoms.emit(1)
+                            try:
+                                self.signals.login_result.emit({"success": False, "message": "账号或密码错误", "userip": self.userip})
+                            except Exception:
+                                pass
 
                         state.login_thread_finished = True
 
