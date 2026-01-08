@@ -1,3 +1,5 @@
+[中文](./README_CN.md) | English
+
 <div align="center">
 # SEIG-Auto-Connect
 </div>
