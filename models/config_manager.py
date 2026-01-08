@@ -91,4 +91,7 @@ class ConfigManager:
 
         if mode != "w!":
             self.read_config()
+
+        # print(f"配置项更新: {variable} = {new_value}")
+
         return new_value

@@ -1,6 +1,6 @@
 # 全局状态变量，供主程序和各模块导入
 
-version = 1.3
+version = 1.4
 username = None
 password = None
 esurfingurl = None
