@@ -1,4 +1,4 @@
-# 全局状态变量，供主程序和各模块导入
+# 全局状态变量
 
 version = 1.4
 username = None
@@ -21,7 +21,6 @@ settings_flag = None
 retry_thread_started = False
 watch_dog_thread_started = False
 new_version_checked = False
-login_thread_finished = False
 
 # RSA公钥
 rsa_public_key = """

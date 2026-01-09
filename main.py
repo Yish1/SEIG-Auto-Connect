@@ -1,36 +1,24 @@
-import re
 import os
 import sys
 import ctypes
 import requests
-import rsa
-import json
-import time
 import win32com.client
 import msvcrt
 # import debugpy
 import builtins
-import threading
-import binascii
-import subprocess
-from io import BytesIO
-from PIL import Image, ImageFilter
-import ddddocr
 import webbrowser as web
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QApplication, QWidget, QInputDialog, QSystemTrayIcon, QMenu, QAction, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
-from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject, QTimer, QMutex
+from PyQt5.QtCore import QThreadPool
 
 from models import state
 from models.config_manager import ConfigManager
-from models.threads import WorkerSignals, login_Thread, jar_Thread, watch_dog, UpdateThread, LoginWorker
+from models.threads import WorkerSignals, login_retry, jar_Thread, watch_dog, UpdateThread, LoginWorker
 from models.windows import settingsWindow
 from Ui.mainwindow import Ui_MainWindow
 
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
-
-
 
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
@@ -97,20 +85,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         # 初始化Setting
         self.settings_window = settingsWindow(self)
 
-        # 根据配置初始化首页控件状态（模式与复选框）
-        try:
-            if str(state.login_mode) == "1":
-                self.radioButton_3.setChecked(True)
-            else:
-                self.radioButton_2.setChecked(True)
-            self.checkBox.setChecked(str(state.save_pwd) == "1")
-            self.checkBox_2.setChecked(str(state.auto_connect) == "1")
-        except Exception:
-            pass
+        # 根据配置初始化首页控件状态
+        if str(state.login_mode) == "1":
+            self.radioButton_3.setChecked(True)
+        else:
+            self.radioButton_2.setChecked(True)
+        self.checkBox.setChecked(str(state.save_pwd) == "1")
+        self.checkBox_2.setChecked(str(state.auto_connect) == "1")
 
         # 绑定按钮功能
         self.pushButton.clicked.connect(lambda: (setattr(self, 'thread_stop_flag', False), self.login())[1])
         self.pushButton_2.clicked.connect(self.logout)
+
         self.checkBox.clicked.connect(lambda: self.update_config(
             "save_pwd", 1 if self.checkBox.isChecked() else 0))
         self.checkBox_2.clicked.connect(self.on_auto_connect_clicked)
@@ -232,9 +218,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 return
             
             try:
-                self.auto_thread = login_Thread(5, self)
+                self.auto_thread = login_retry(5, self)
                 self.auto_thread.signals.enable_buttoms.connect(self.enable_buttoms)
-                self.auto_thread.signals.show_input_dialog1.connect(self.show_input_dialog)
                 self.auto_thread.signals.thread_login.connect(lambda: self.start_login_worker())
                 self.auto_thread.signals.finished.connect(lambda: print("结束自动登录线程"))
                 self.threadpool.start(self.auto_thread)
@@ -276,100 +261,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def update_config(self, variable, new_value, mode=None):
         return self.config_manager.update_config(variable, new_value, mode)
 
-    def encrypt_rsa(self, message, pub_key):
-        message_bytes = message.encode('utf-8')
-        encrypted = rsa.encrypt(message_bytes, pub_key)
-        return binascii.hexlify(encrypted).decode('utf-8')
-
-    def preprocess_image(self, image):
-        # 转换为灰度图像
-        image = image.convert("L")
-        # 应用二值化
-        threshold = 128
-        image = image.point(lambda p: p > threshold and 255)
-        image = image.filter(ImageFilter.MedianFilter(size=3))
-        return image
-
-    # 获取验证码图片URL
-    def get_captcha_image_url(self, session):
-        page_url = f"http://{state.esurfingurl}/qs/index_gz.jsp?wlanacip={state.wlanacip}&wlanuserip={state.wlanuserip}"
-        headers = {
-            "Origin": f"http://{state.esurfingurl}",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
-        }
-
-        try:
-            response = session.get(page_url, timeout=3, headers=headers)
-            print("成功获取登录URL")
-        except Exception as e:
-            print(f"请求获取登录页面失败：{e}")
-            return None
-
-        try:
-            url = re.search(r'/common/image_code\.jsp\?time=\d+',
-                            str(response.content)).group()
-
-            if url:
-                image_url = f'http://{state.esurfingurl}{url}'
-                print(f"获取验证码图片URL: {image_url}")
-                return image_url
-            else:
-                print("未找到验证码图片")
-                return None
-
-        except Exception as e:
-            print(f"解析页面失败：{e}")
-            self.run_settings()
-            return None
-    # 自动识别验证码
-
-    def show_captcha_and_input_code(self, session):
-        image_code_url = self.get_captcha_image_url(session)
-
-        if image_code_url:
-            try:
-                response = session.get(image_code_url, timeout=3)
-                if response.status_code == 200:
-                    image = Image.open(BytesIO(response.content))
-                    ocr = ddddocr.DdddOcr(show_ad=False)
-                    processed_image = self.preprocess_image(image)
-                    # image.show()
-                    code = ocr.classification(processed_image)
-                    # result = ocr.classification(image)
-                    # 使用正则表达式去除空格、换行和无关符号
-                    code = re.sub(
-                        r'[\s\.\:\(\)\[\]\{\}\-\+\!\@\#\$\%\^\&\￥\*\_\=\;\,\?\/]', '', code)
-                    print(f"识别出的验证码是：{code}")
-                    return code, image
-                else:
-                    print("无法获取验证码图片，状态码：", response.status_code)
-                    return None, None
-            except Exception as e:
-                print(f"获取验证码图片失败：{e}")
-                return None, None
-        else:
-            return None, None
-
     def login(self, mode=None, ip=None, user=None, pwd=None):
-        # 手动按钮登录仍在主线程处理
-        if mode == 1:
-            state.username = self.lineEdit.text()
-            self.update_config("username", state.username)
-            state.password = self.lineEdit_2.text()
+        state.username = self.lineEdit.text()
+        state.password = self.lineEdit_2.text()
 
-        else:
-            # 非手动模式通过后台 worker 执行网络请求，避免阻塞 GUI
-            state.username = self.lineEdit.text()
-            self.update_config("username", state.username)
-            state.password = self.lineEdit_2.text()
-
-            if mode == "mulit":
-                state.username = user
-                state.password = pwd
-                state.wlanuserip = ip
-
-            self.start_login_worker(mode)
-            return
+        if mode == "mulit":
+            state.username = user
+            state.password = pwd
+            state.wlanuserip = ip
 
         if state.esurfingurl == "0.0.0.0:0" or state.esurfingurl == "自动获取失败,请检查网线连接":
             self.run_settings()
@@ -381,126 +280,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if not state.password or state.password == "0":
             print("你账号没有密码的吗？？？")
             return
-        
-        print("即将登录: " + state.username + " IP: " + state.wlanuserip)
 
-        if not state.username.startswith('t') and state.login_mode == 0:  # 判断是否以 't' 开头，仅适用于SEIG
-            self.login_jar(state.username, state.password, state.wlanuserip, state.wlanacip)
-            state.jar_login = True
-            return
-
-        session = requests.session()
-
-        code, image = self.show_captcha_and_input_code(session)
-
-        if mode == 1:
-            try:
-                image.show()
-                self.window = QWidget()
-                self.window.setWindowIcon(QtGui.QIcon(':/icon/yish.ico'))
-                cust_code, ok_pressed = QInputDialog.getText(
-                    self.window, "手动输入验证码", "请输入验证码:")
-                if ok_pressed and cust_code:
-                    code = cust_code
-                else:
-                    print("请输入验证码！")
-                    return
-            except Exception as e:
-                print("无法获取验证码:", e)
-
-        pub_key = rsa.PublicKey.load_pkcs1_openssl_pem(state.rsa_public_key.encode())
-
-        # 登录数据
-        login_data = {
-            "userName": state.username,
-            "password": state.password,
-            "rand": code
-        }
-
-        login_key = self.encrypt_rsa(json.dumps(login_data), pub_key)
-        # 构造请求头和Cookie
-        headers = {
-            "Origin": f"http://{state.esurfingurl}",
-            "Referer": f"http://{state.esurfingurl}/qs/index_gz.jsp?wlanacip={state.wlanacip}&wlanuserip={state.wlanuserip}",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
-        }
-
-        # 构造请求参数
-        post_data = {
-            'loginKey': login_key,
-            'wlanuserip': state.wlanuserip,
-            'wlanacip': state.wlanacip
-        }
-
-        # 发送POST请求
-        try:
-            response = session.post(
-                f'http://{state.esurfingurl}/ajax/login', timeout=3, headers=headers, data=post_data)
-
-            if response.status_code == 200:
-                data = response.json()
-                if data['resultCode'] == "0" or data['resultCode'] == "13002000":
-                    state.signature = response.cookies["signature"]
-                    print("成功连接校园网！")
-                    state.connected = True
-
-                    self.check_new_version()
-
-                    if state.watch_dog_thread_started != True:
-                        state.stop_watch_dog = False
-                        self.watchdog_thread = watch_dog()
-                        self.watchdog_thread.signals.update_progress.connect(
-                            self.update_progress_bar)
-                        self.watchdog_thread.signals.print_text.connect(
-                            self.update_table)
-                        self.watchdog_thread.signals.thread_login.connect(
-                            lambda: self.start_login_worker())
-                        self.threadpool.start(self.watchdog_thread)
-
-                    self.update_config("username", state.username)
-                elif data['resultCode'] == "13018000":
-                    print("已办理一人一号多终端业务的用户，请使用客户端登录")
-                else:
-                    print(f"登录失败: {data['resultInfo']}")
-
-                    if data['resultInfo'] == "用户认证失败" or "密码错误" in data['resultInfo']:
-                        print("用户名或密码错误，请重新输入！")
-                        self.thread_stop_flag = True
-                        state.retry_thread_started = False
-                        return
-
-                    if data['resultInfo'] == "验证码错误":
-                        if mode == "mulit":
-                            pass
-                        else:
-                            try:
-                                if state.retry_thread_started == False:
-                                    state.connected = False
-                                    print("验证码识别错误，即将重试...")
-                                    self.thread = login_Thread(5,self)
-                                    self.thread.signals.enable_buttoms.connect(
-                                        self.enable_buttoms)
-                                    self.thread.signals.show_input_dialog1.connect(
-                                        self.show_input_dialog)
-                                    self.thread.signals.thread_login.connect(
-                                        lambda: self.start_login_worker())
-                                    self.thread.signals.print_text.connect(
-                                        self.update_table)
-                                    self.thread.signals.finished.connect(
-                                        lambda: print("结束线程"))
-                                    self.threadpool.start(self.thread)
-                                    state.retry_thread_started = True
-                            except:
-                                pass
-            else:
-                print("请求失败，状态码：", response.status_code)
-        except Exception as e:
-            print(f"登录请求失败，请先获取配置并确保配置正确：{e}")
-            state.connected = True
-            self.run_settings()
-
-        state.login_thread_finished = True
-
+        self.start_login_worker(mode)
+        return
     def login_jar(self, username, password, userip, acip):
         self.enable_buttoms(0)
         try:
@@ -553,7 +335,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
                     },
                     data=f"wlanuserip={state.wlanuserip}&wlanacip={state.wlanacip}",
-                    timeout=3
+                    timeout=3,
+                    proxies={"http": None, "https": None}
                 )
 
                 if response.status_code == 200:
@@ -603,6 +386,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             state.connected = True
             print("成功连接校园网！")
             self.check_new_version()
+            self.save_password()
+            
             if state.watch_dog_thread_started != True:
                 state.stop_watch_dog = False
                 self.watchdog_thread = watch_dog()
@@ -610,12 +395,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.watchdog_thread.signals.print_text.connect(self.update_table)
                 self.watchdog_thread.signals.thread_login.connect(lambda: self.start_login_worker())
                 self.threadpool.start(self.watchdog_thread)
-
-            if self.checkBox.isChecked():
-                plain_pwd = self.lineEdit_2.text()
-                if plain_pwd:
-                    encrypted_password = ''.join(chr(ord(char) + 10) for char in plain_pwd)
-                    self.update_config("password", encrypted_password)
 
             self.update_config("username", state.username)
         else:
@@ -636,9 +415,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 if hasattr(self.settings_window, 'add_mulit_summary'):
                     self.settings_window.add_mulit_summary(ip, success, message)
 
-        # 标记登录步骤完成，便于顺序控制
-        state.login_thread_finished = True
-
     def enable_buttoms(self, mode):
         if mode == 0:
             self.lineEdit.setEnabled(False)
@@ -650,9 +426,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.lineEdit_2.setEnabled(True)
             self.pushButton.setEnabled(True)
             self.pushButton_2.setEnabled(True)
-
-    def show_input_dialog(self):
-        self.login(1)
 
     def update_progress_bar(self, mode, value, value2):
         self.progressBar.setValue(value)
@@ -747,6 +520,43 @@ if __name__ == "__main__":
             elif result == 1:
                 print("用户选择继续运行。")
 
+
+        # 启用 Windows DPI 感知（优先 Per-Monitor V2，回退到 System Aware）
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(
+                    2)  # PROCESS_PER_MONITOR_DPI_AWARE
+            except Exception:
+                try:
+                    print("启用 Windows DPI 感知失败，尝试回退到系统感知。")
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except Exception:
+                    pass
+
+        # Qt 高 DPI 设置（需在创建 QApplication 之前）
+        # 自动根据屏幕缩放因子调整
+        os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
+        # 缩放舍入策略（Qt 5.14+ 生效）
+        # 注意：在 Windows 7 上启用 PassThrough 会导致文字不显示，这里仅在 Win10+ 启用
+        if hasattr(QtGui, "QGuiApplication") and hasattr(QtCore.Qt, "HighDpiScaleFactorRoundingPolicy"):
+            try:
+                ok_to_set = True
+                if sys.platform == "win32":
+                    try:
+                        v = sys.getwindowsversion()
+                        # 仅在 Windows 10 及以上启用（Windows 7/8/8.1 跳过）
+                        ok_to_set = (v.major >= 10)
+                    except Exception:
+                        ok_to_set = False
+                if ok_to_set:
+                    QtGui.QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
+                        QtCore.Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+                    )
+                else:
+                    print("跳过设置 HighDpiScaleFactorRoundingPolicy")
+            except Exception:
+                pass
+
         if hasattr(QtCore.Qt, "AA_EnableHighDpiScaling"):
             QtWidgets.QApplication.setAttribute(
                 QtCore.Qt.AA_EnableHighDpiScaling, True)
@@ -754,10 +564,12 @@ if __name__ == "__main__":
         if hasattr(QtCore.Qt, "AA_UseHighDpiPixmaps"):
             QtWidgets.QApplication.setAttribute(
                 QtCore.Qt.AA_UseHighDpiPixmaps, True)
+            
         app = QtWidgets.QApplication(sys.argv)
         mainWindow = MainWindow()
         mainWindow.show()
         sys.exit(app.exec_())
+
     except Exception as e:
         user32 = ctypes.windll.user32
         user32.MessageBoxW(None, f"程序启动时遇到严重错误:{e}", "Warning!", 0x30)

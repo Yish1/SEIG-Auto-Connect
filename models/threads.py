@@ -1,20 +1,25 @@
 import os
-import time
-import threading
-import subprocess
-import requests
-from PyQt5.QtCore import QRunnable, QObject, pyqtSignal, QTimer, QMutex
-from PyQt5.QtWidgets import QMessageBox
-
-from models import state
 import rsa
+import time
 import json
 import ddddocr
+import requests
+import threading
+import subprocess
+
+from PIL import Image
+from io import BytesIO
+from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtCore import QRunnable, QObject, pyqtSignal, QTimer, QMutex
+
+from models import state
+
+# 忽略代理配置
+DISABLE_PROXY = {"http": None, "https": None}
 
 class WorkerSignals(QObject):
     finished = pyqtSignal()
     enable_buttoms = pyqtSignal(int)
-    show_input_dialog1 = pyqtSignal()
     thread_login = pyqtSignal()
     update_progress = pyqtSignal(int, int, int)
     connected_success = pyqtSignal()
@@ -26,7 +31,7 @@ class WorkerSignals(QObject):
     login_result = pyqtSignal(dict)
 
 
-class login_Thread(QRunnable):
+class login_retry(QRunnable):
     def __init__(self, times, parent=None):
         super().__init__()
         self.signals = WorkerSignals()
@@ -37,16 +42,13 @@ class login_Thread(QRunnable):
         self.signals.enable_buttoms.emit(0)
 
         while self.times > 0:
-            # 检测外部停止标记（例如密码错误后停止重试）
-            try:
-                if self.main_window is not None and getattr(self.main_window, 'thread_stop_flag', False):
-                    self.signals.print_text.emit("密码错误，停止自动重试")
-                    state.retry_thread_started = False
-                    self.signals.enable_buttoms.emit(1)
-                    self.signals.finished.emit()
-                    return
-            except Exception:
-                pass
+            if self.main_window is not None and getattr(self.main_window, 'thread_stop_flag', False):
+                self.signals.print_text.emit("密码错误，停止自动重试")
+                state.retry_thread_started = False
+                self.signals.enable_buttoms.emit(1)
+                self.signals.finished.emit()
+                return
+
             time.sleep(3)
             if state.connected == True:
                 state.retry_thread_started = False
@@ -60,16 +62,15 @@ class login_Thread(QRunnable):
 
         if state.connected == False:
             state.retry_thread_started = False
-            self.signals.print_text.emit("已多次尝试无法获取验证码，请手动输入验证码、重试或联系Yish_")
-            if self.times == 0:
-                self.signals.show_input_dialog1.emit()
+            self.signals.print_text.emit("已多次尝试识别验证码错误，这一般不是验证码问题，请检查当前网络环境后重试！")
+
         self.signals.enable_buttoms.emit(1)
         self.signals.finished.emit()
 
 
 class LoginWorker(QRunnable):
     """在后台执行网络登录的 Worker，避免在主线程阻塞。"""
-    def __init__(self, username, password, userip, acip, mode=0):
+    def __init__(self, username, password, userip, acip, mode=0, code=None):
         super().__init__()
         self.signals = WorkerSignals()
         self.username = username
@@ -77,6 +78,7 @@ class LoginWorker(QRunnable):
         self.userip = userip
         self.acip = acip
         self.mode = mode
+        self.code = code
 
     def get_captcha_image_url(self, session):
         try:
@@ -95,7 +97,10 @@ class LoginWorker(QRunnable):
     def run(self):
         result = {"success": False, "message": "", "resultCode": None}
         try:
-            session = requests.session()
+            # 屏蔽代理
+            session = requests.Session()
+            session.trust_env = False
+            session.proxies = DISABLE_PROXY
             self.signals.print_text.emit(f"即将登录: {self.username} IP: {state.wlanuserip}")
             # 获取验证码并识别
             image_url = self.get_captcha_image_url(session)
@@ -105,8 +110,7 @@ class LoginWorker(QRunnable):
                 try:
                     resp = session.get(image_url, timeout=5)
                     if resp.status_code == 200:
-                        from io import BytesIO
-                        from PIL import Image
+
                         image = Image.open(BytesIO(resp.content))
                         ocr = ddddocr.DdddOcr(show_ad=False)
                         code = ocr.classification(image)
@@ -135,6 +139,7 @@ class LoginWorker(QRunnable):
                     result['message'] = data.get('resultInfo', '登录失败')
             else:
                 result['message'] = f'HTTP状态码:{resp.status_code}'
+                
         except Exception as e:
             result['message'] = str(e)
 
@@ -236,8 +241,6 @@ class jar_Thread(QRunnable):
                             except Exception:
                                 pass
 
-                        state.login_thread_finished = True
-
                     if self.process.poll() is not None:
                         break
 
@@ -280,7 +283,6 @@ class jar_Thread(QRunnable):
                             break
             finally:
                 jar_Thread.lock.unlock()
-                state.login_thread_finished = True
                 try:
                     os.remove("logout.signal")
                 except FileNotFoundError:
@@ -303,7 +305,7 @@ class watch_dog(QRunnable):
 
     def ping_baidu(self):
         try:
-            response = requests.head("http://www.baidu.com", timeout=2)
+            response = requests.head("http://www.baidu.com", timeout=2, proxies=DISABLE_PROXY)
             return response.status_code == 200
         except:
             return False
@@ -329,7 +331,7 @@ class watch_dog(QRunnable):
                         try:
                             self.signals.update_progress.emit(0, 0, 0)
                         except:
-                            self.signals.print_text.emit("信号槽已被删除")
+                            print("信号槽已被删除")
                         return
                     time.sleep(step)
                     total_sleep_time -= step
@@ -343,10 +345,8 @@ class watch_dog(QRunnable):
                     current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
                     self.signals.print_text.emit(f"看门狗:网络断开，重新登录...[{current_time}]")
                     self.ping_timeout = self.reconnect_timeout
-                    try:
-                        self.signals.thread_login.emit()
-                    except Exception as e:
-                        self.signals.print_text.emit(f"看门狗:登录失败: {e}")
+                    self.signals.thread_login.emit()
+
                 else:
                     self.ping_timeout = original_interval
                     self.signals.print_text.emit("看门狗:网络正常无需操作")
@@ -367,11 +367,11 @@ class UpdateThread(QRunnable):
             return
 
         try:
-            page = requests.get(updatecheck, timeout=5, headers=headers)
+            page = requests.get(updatecheck, timeout=5, headers=headers, proxies=DISABLE_PROXY)
             newversion = float(page.text)
             findnewversion = "检测到新版本！"
             if newversion > state.version:
-                new_version_detail = requests.get(updatecheck + "?detail", timeout=5, headers=headers)
+                new_version_detail = requests.get(updatecheck + "?detail", timeout=5, headers=headers, proxies=DISABLE_PROXY)
                 new_version_detail = new_version_detail.text
                 self.signals.show_message.emit("云端最新版本: %s<br>当前版本: %s<br><br>%s" % (
                     newversion, state.version, new_version_detail), findnewversion)
@@ -379,7 +379,7 @@ class UpdateThread(QRunnable):
             self.signals.print_text.emit(f"CMXZ_API_CHECK_UPDATE_ERROR: {e}")
 
         try:
-            is_enable = requests.get(updatecheck + "?enable", timeout=5, headers=headers)
+            is_enable = requests.get(updatecheck + "?enable", timeout=5, headers=headers, proxies=DISABLE_PROXY)
             is_enable = int(is_enable.text)
             state.new_version_checked = True
 

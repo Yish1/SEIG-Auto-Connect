@@ -81,7 +81,7 @@ class ConfigManager:
                 else:
                     seen_keys.add(key)
 
-        if not updated and new_value:
+        if not updated and new_value is not None:
             lines.append(f"[{variable}]={new_value}\n")
 
         lines = [line for line in lines if line.strip()]
