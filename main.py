@@ -307,9 +307,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def save_password(self):
         if self.checkBox.isChecked():
             plain_pwd = self.lineEdit_2.text()
+            username = self.lineEdit.text()
             if plain_pwd:
                 encrypted_password = ''.join(chr(ord(char) + 10) for char in plain_pwd)
                 self.update_config("password", encrypted_password)
+                if username:
+                    self.update_config("username", username)
 
 
     def logout(self):
