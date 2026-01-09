@@ -163,3 +163,4 @@ cython_debug/
 
 # package
 SAC/
+PyQt5/
