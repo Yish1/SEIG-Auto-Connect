@@ -623,7 +623,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         except:
             pass
         try:
-            self.jar_Thread = jar_Thread(username, password, userip, acip)
+            self.jar_Thread = jar_Thread(username, password, userip, acip, mainWindow=self)
             self.jar_Thread.signals.enable_buttoms.connect(self.enable_buttoms)
             # self.jar_Thread.signals.connected_success.connect(
             #     self.update_progress_bar)
@@ -810,8 +810,9 @@ class login_Thread(QRunnable):
 class jar_Thread(QRunnable):
     processes = []
     lock = QMutex()  # 线程锁，防止竞争条件
+    mainWindow = None  # 类变量存储主窗口引用
 
-    def __init__(self, username, password, userip, acip):
+    def __init__(self, username, password, userip, acip, mainWindow=None):
         super().__init__()
         self.signals = WorkerSignals()
         self.username = username
@@ -819,6 +820,7 @@ class jar_Thread(QRunnable):
         self.userip = userip
         self.acip = acip
         self.process = None  # 存储当前线程的进程
+        jar_Thread.mainWindow = mainWindow  # 设置类变量
 
     def run(self):
         # debugpy.breakpoint()
@@ -877,11 +879,9 @@ class jar_Thread(QRunnable):
                             self.signals.print_text.emit(
                                 f"{pid}: 当前设备已连接互联网，无需再次登录\n如果没有使用此工具登录\n将不能使用此工具的下线功能\n请使用天翼校园网手动下线，或等待8分钟")
                             self.signals.update_check.emit()
-                            self.signals.enable_buttoms.emit(1)
 
                         if "The login has been authorized" in output:
                             self.signals.connected_success.emit()
-                            self.signals.enable_buttoms.emit(1)
                             state.connected = True
                             self.signals.print_text.emit(
                                 f"{pid}: 登录成功！即将发送心跳... :)")
@@ -898,9 +898,9 @@ class jar_Thread(QRunnable):
                             self.signals.print_text.emit(
                                 f"{pid}: 登录失败，账号或密码错误！")
                             # self.signals.update_check.emit()
-                            self.signals.enable_buttoms.emit(1)
                         
                         state.login_thread_finished = True
+                        self.signals.enable_buttoms.emit(1)
 
                     if self.process.poll() is not None:  # 进程结束时跳出
                         break
@@ -948,6 +948,8 @@ class jar_Thread(QRunnable):
             finally:
                 jar_Thread.lock.unlock()
                 state.login_thread_finished = True
+                jar_Thread.mainWindow.enable_buttoms(1)
+                
                 try:
                     os.remove("logout.signal")
                 except FileNotFoundError:
