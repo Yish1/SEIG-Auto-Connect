@@ -1105,6 +1105,43 @@ if __name__ == "__main__":
             elif result == 1:
                 print("用户选择继续运行。")
 
+
+        # 启用 Windows DPI 感知（优先 Per-Monitor V2，回退到 System Aware）
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(
+                    2)  # PROCESS_PER_MONITOR_DPI_AWARE
+            except Exception:
+                try:
+                    print("启用 Windows DPI 感知失败，尝试回退到系统感知。")
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except Exception:
+                    pass
+
+        # Qt 高 DPI 设置（需在创建 QApplication 之前）
+        # 自动根据屏幕缩放因子调整
+        os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
+        # 缩放舍入策略（Qt 5.14+ 生效）
+        # 注意：在 Windows 7 上启用 PassThrough 会导致文字不显示，这里仅在 Win10+ 启用
+        if hasattr(QtGui, "QGuiApplication") and hasattr(QtCore.Qt, "HighDpiScaleFactorRoundingPolicy"):
+            try:
+                ok_to_set = True
+                if sys.platform == "win32":
+                    try:
+                        v = sys.getwindowsversion()
+                        # 仅在 Windows 10 及以上启用（Windows 7/8/8.1 跳过）
+                        ok_to_set = (v.major >= 10)
+                    except Exception:
+                        ok_to_set = False
+                if ok_to_set:
+                    QtGui.QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
+                        QtCore.Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+                    )
+                else:
+                    print("跳过设置 HighDpiScaleFactorRoundingPolicy")
+            except Exception:
+                pass
+
         if hasattr(QtCore.Qt, "AA_EnableHighDpiScaling"):
             QtWidgets.QApplication.setAttribute(
                 QtCore.Qt.AA_EnableHighDpiScaling, True)
@@ -1112,12 +1149,14 @@ if __name__ == "__main__":
         if hasattr(QtCore.Qt, "AA_UseHighDpiPixmaps"):
             QtWidgets.QApplication.setAttribute(
                 QtCore.Qt.AA_UseHighDpiPixmaps, True)
+            
         app = QtWidgets.QApplication(sys.argv)
         mainWindow = MainWindow()
         mainWindow.show()
         sys.exit(app.exec_())
+
     except Exception as e:
         user32 = ctypes.windll.user32
         user32.MessageBoxW(None, f"程序启动时遇到严重错误:{e}", "Warning!", 0x30)
         sys.exit()
-# 编译指令nuitka --standalone --lto=yes --msvc=latest --disable-ccache --windows-console-mode=disable --enable-plugin=pyqt5,upx --upx-binary=F:\Programs\upx\upx.exe --output-dir=SAC  --windows-icon-from-ico=yish.ico --nofollow-import-to=unittest main.py 
+# 编译指令nuitka --standalone --lto=yes --msvc=latest --disable-ccache --windows-console-mode=disable --enable-plugin=pyqt5,upx --upx-binary="F:\Programs\upx\upx.exe" --include-data-dir=ddddocr=ddddocr --include-data-dir=jre=jre --include-data-file=login.jar=login.jar --include-package=models --output-dir=SAC --windows-icon-from-ico=yish.ico --nofollow-import-to=unittest main.py
