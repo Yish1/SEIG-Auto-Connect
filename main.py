@@ -447,7 +447,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         }
 
         try:
-            response = session.get(page_url, timeout=3, headers=headers)
+            response = session.get(page_url, timeout=3, headers=headers, proxies={"http": None, "https": None})
             print("成功获取登录URL")
         except Exception as e:
             print(f"请求获取登录页面失败：{e}")
@@ -476,10 +476,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         if image_code_url:
             try:
-                response = session.get(image_code_url, timeout=3)
+                response = session.get(image_code_url, timeout=3, proxies={"http": None, "https": None}, verify=False)
                 if response.status_code == 200:
                     image = Image.open(BytesIO(response.content))
-                    ocr = ddddocr.DdddOcr()
+                    ocr = ddddocr.DdddOcr(show_ad = False)
                     processed_image = self.preprocess_image(image)
                     # image.show()
                     code = ocr.classification(processed_image)
@@ -573,7 +573,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         # 发送POST请求
         try:
             response = session.post(
-                f'http://{esurfingurl}/ajax/login', timeout=3, headers=headers, data=post_data)
+                f'http://{esurfingurl}/ajax/login', timeout=3, headers=headers, data=post_data, proxies={"http": None, "https": None}, verify=False)
 
             if response.status_code == 200:
                 data = response.json()
@@ -691,7 +691,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
                     },
                     data=f"wlanuserip={wlanuserip}&wlanacip={wlanacip}",
-                    timeout=3
+                    timeout=3, 
+                    proxies={"http": None, "https": None}, 
+                    verify=False
                 )
 
                 if response.status_code == 200:
