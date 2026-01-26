@@ -3,6 +3,13 @@
 from PyQt5.QtCore import QThreadPool
 
 class global_state:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self):
         if hasattr(self, '_initialized') and self._initialized:
             return
