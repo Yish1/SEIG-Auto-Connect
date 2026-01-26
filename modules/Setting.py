@@ -8,7 +8,7 @@ from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject, QTimer, QM
 from Ui.Main_UI import Ui_MainWindow  # 导入ui文件
 from Ui.Settings import Ui_sac_settings
 
-from models.state import global_state
+from modules.State import global_state
 
 state = global_state()
 
