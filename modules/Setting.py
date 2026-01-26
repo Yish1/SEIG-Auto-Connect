@@ -50,8 +50,8 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
 
         if reply == QMessageBox.Yes:
             try:
-                if os.path.exists(self.Main_window.config_path):
-                    os.remove(self.Main_window.config_path)
+                if os.path.exists(state.config_path):
+                    os.remove(state.config_path)
                 self.Main_window.read_config()
                 self.get_config_value()
                 self.Main_window.radioButton_2.setChecked(True)
@@ -171,10 +171,10 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
 
         mconfig = {}
 
-        if not os.path.exists(self.Main_window.config_path):
+        if not os.path.exists(state.config_path):
             self.Main_window.read_config()
 
-        with open(self.Main_window.config_path, 'r', encoding='utf-8') as file:
+        with open(state.config_path, 'r', encoding='utf-8') as file:
             for line in file:
                 if '=' in line:
                     key, value = line.strip().split('=', 1)

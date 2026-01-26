@@ -4,6 +4,7 @@ from .Update_Thread import UpdateThread
 from .Jar_Thread import jar_Thread
 from .Watch_dog import watch_dog
 from .Working_signals import WorkerSignals
+from .Config_Manager import read_config_file, update_entry
 
 __all__ = [
     "global_state",
@@ -11,5 +12,7 @@ __all__ = [
     "UpdateThread",
     "jar_Thread",
     "watch_dog",
-    "WorkerSignals"
+    "WorkerSignals",
+    "read_config_file",
+    "update_entry",
 ]

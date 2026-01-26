@@ -1,5 +1,5 @@
 # 管理全局变量
-
+import os
 from PyQt5.QtCore import QThreadPool
 
 class global_state:
@@ -16,6 +16,12 @@ class global_state:
         self._initialized = True
 
         self.version = 1.3
+        
+        # 获取用户 AppData\Roaming 路径
+        self.config_path = None
+        appdata_dir = os.getenv("APPDATA")  # 通常是 C:\Users\<用户名>\AppData\Roaming
+        config_dir = os.path.join(appdata_dir, "SAC")
+        self.config_path = os.path.join(config_dir, "config.ini")
 
         # 配置类变量
         self.username = None

@@ -74,22 +74,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
 
-        # 重写print
-        self.global_print = builtins.print
-
-        def print(*args, **kwargs):
-            self.global_print(*args, **kwargs)
-            text = " ".join(map(str, args))
-            try:
-                self.listWidget.addItem(text)
-            except:
-                pass
-            try:
-                self.listWidget.setCurrentRow(self.listWidget.count() - 1)
-            except Exception as e:
-                print(f"ERROR:{e}")
-        builtins.print = print
-
         # 启动时运行
         self.read_config()
         self.init_save_password()
@@ -105,7 +89,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             "save_pwd", 1 if self.checkBox.isChecked() else 0))
         self.checkBox_2.clicked.connect(lambda: self.update_config(
             "auto_connect", 1 if self.checkBox_2.isChecked() else 0) or (
-                print("开机将自启，并自动登录，需要记住密码\n看门狗每10分钟检测一次网络连接情况\n下次自动登录成功时，将启动看门狗") if self.checkBox_2.isChecked() else None) or (
+                self.update_table("开机将自启，并自动登录，需要记住密码\n看门狗每10分钟检测一次网络连接情况\n下次自动登录成功时，将启动看门狗") if self.checkBox_2.isChecked() else None) or (
                 self.checkBox.setChecked(True) if self.checkBox_2.isChecked() else None) or (
                     self.add_to_startup() if self.checkBox_2.isChecked() else self.add_to_startup(1)) or (self.update_config("save_pwd", 1))
         )
@@ -118,7 +102,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.radioButton_2.toggled.connect(lambda checked: checked and self.change_login_mode(0))
         self.radioButton_3.toggled.connect(lambda checked: checked and self.change_login_mode(1))
 
-        print("感谢您使用此工具！\n请不要在任何大型社交平台\n(B站、贴吧、小红书、狐友等)\n讨论此工具！")
+        self.update_table("感谢您使用此工具！\n请不要在任何大型社交平台\n(B站、贴吧、小红书、狐友等)\n讨论此工具！")
 
     def on_tray_icon_clicked(self, reason):
         if reason == QSystemTrayIcon.Trigger:  # 仅响应左键单击
@@ -129,7 +113,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if event.type() == QtCore.QEvent.WindowStateChange:
             if self.isMinimized():
                 if state.settings_flag != None:
-                    print("请先关闭设置界面再最小化！")
+                    self.update_table("请先关闭设置界面再最小化！")
                     self.showNormal()
                     return
                 else:
@@ -156,7 +140,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
             if msg_box.clickedButton() == btn_minimize:
                 if state.settings_flag != None:
-                    print("请先关闭设置界面再最小化！")
+                    self.update_table("请先关闭设置界面再最小化！")
                     event.ignore()
                     return
                 event.ignore()  # 最小化到托盘
@@ -202,16 +186,16 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             # 删除开机自启项
             if os.path.exists(shortcut_path):
                 os.remove(shortcut_path)
-                print("开机自启已关闭")
+                self.update_table("开机自启已关闭")
             else:
-                print("开机自启项不存在，无需删除。")
+                self.update_table("开机自启项不存在，无需删除。")
             return
 
         # 检查是否已存在开机自启项
         if os.path.exists(shortcut_path):
             pass
         else:
-            print(f"已添加{app_path}至启动目录")
+            self.update_table(f"已添加{app_path}至启动目录")
 
         # 写入自启动文件
         shell = win32com.client.Dispatch("WScript.Shell")
@@ -225,7 +209,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         self.read_config()
         if state.auto_connect == "1":
-            print("正在尝试自动连接...")
+            self.update_table("正在尝试自动连接...")
 
             if not state.username.startswith('t') and state.login_mode == 0:
                 state.jar_login = True
@@ -240,7 +224,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.show_input_dialog)
             self.auto_thread.signals.thread_login.connect(self.login)
             self.auto_thread.signals.finished.connect(
-                lambda: print("结束自动登录线程"))
+                lambda: self.update_table("结束自动登录线程"))
             state.threadpool.start(self.auto_thread)
             state.retry_thread_started = True
             self.add_to_startup()
@@ -253,7 +237,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         try:
             self.login("mulit", ip, user, pwd)
         except Exception as e:
-            print(e)
+            self.update_table(e)
         # try:
         # state.threadpool = QThreadPool()
         # self.auto_thread = login_Thread(2)
@@ -263,12 +247,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         #     self.show_input_dialog)
         # self.auto_thread.signals.thread_login.connect(lambda:self.login("mulit", ip, user, pwd))
         # self.auto_thread.signals.finished.connect(
-        #     lambda: print("结束线程"))
+        #     lambda: self.update_table("结束线程"))
         # state.threadpool.start(self.auto_thread)
         # state.retry_thread_started = True
             # self.add_to_startup()
         # except Exception as e:
-        #     print(e)
+        #     self.update_table(e)
 
     def run_settings(self):
 
@@ -277,125 +261,58 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 settings_window = settingsWindow(mainWindow)
                 state.settings_flag = settings_window.run_settings_window()
             except Exception as e:
-                print(f"无法打开设置界面{e}")
+                self.update_table(f"无法打开设置界面{e}")
 
     def read_config(self):
         config = {}
 
-        # 获取用户 AppData\Roaming 路径
-        appdata_dir = os.getenv("APPDATA")  # 通常是 C:\Users\<用户名>\AppData\Roaming
-        config_dir = os.path.join(appdata_dir, "SAC")
-        self.config_path = os.path.join(config_dir, "config.ini")
+        config = read_config_file(state.config_path)
 
-        # 确保目录存在
-        os.makedirs(config_dir, exist_ok=True)
+        # 配置项定义: (属性名, 默认值, 类型转换函数)
+        config_maps = [
+            ('username', "", str),
+            ('password', "", str),
+            ('wlanacip', "0.0.0.0", str),
+            ('wlanuserip', "0.0.0.0", str),
+            ('esurfingurl', "0.0.0.0:0", str),
+            ('save_pwd', "1", str),
+            ('auto_connect', "0", str),
+            ('watch_dog_timeout', 300, int),
+            ('mulit_login', 1, int),
+            ('login_mode', 0, int),
+        ]
 
-        # 如果 config.ini 不存在就创建
-        if not os.path.exists(self.config_path):
-            with open(self.config_path, 'w', encoding='utf-8') as file:
-                file.write("")
-
-        with open(self.config_path, 'r', encoding='utf-8') as file:
-            for line in file:
-                if '=' in line:
-                    key, value = line.strip().split('=', 1)
-                    config[key.strip('[]')] = value.strip()
         try:
-            state.username = config.get('username') if config.get(
-                'username') else self.update_config("username", "", "w!")
-            state.password = config.get('password') if config.get(
-                'password') else self.update_config("password", "", "w!")
-            state.wlanacip = str(config.get('wlanacip')) if config.get(
-                'wlanacip') else self.update_config("wlanacip", "0.0.0.0", "w!")
-            state.wlanuserip = str(config.get('wlanuserip')) if config.get(
-                'wlanuserip') else self.update_config("wlanuserip", "0.0.0.0", "w!")
-            state.esurfingurl = str(config.get('esurfingurl')) if config.get(
-                'esurfingurl') else self.update_config("esurfingurl", "0.0.0.0:0", "w!")
-            state.save_pwd = config.get('save_pwd') if config.get(
-                'save_pwd') else self.update_config("save_pwd", "1", "w!")
-            state.auto_connect = config.get('auto_connect') if config.get(
-                'auto_connect') else self.update_config("auto_connect", "0", "w!")
-            state.watch_dog_timeout = int(config.get('watch_dog_timeout')) if config.get(
-                'watch_dog_timeout') else self.update_config("watch_dog_timeout", 300, "w!")
-            state.mulit_login = int(config.get('mulit_login')) if config.get(
-                'mulit_login') else self.update_config("mulit_login", "1", "w!")
-            state.login_mode = int(config.get('login_mode')) if config.get(
-                'login_mode') else self.update_config("login_mode", "0", "w!")
+            for key, default, converter in config_maps:
+                value = config.get(key)
+                if value:
+                    setattr(state, key, converter(value))
+                else:
+                    self.update_config(key, default, "w!")
+                    setattr(state, key, default)
 
-            if state.save_pwd == "1":
-                self.checkBox.setChecked(True)
-            else:
-                self.checkBox.setChecked(False)
-
-            if state.auto_connect == "1":
-                self.checkBox_2.setChecked(True)
-            else:
-                self.checkBox_2.setChecked(False)
-
-            if state.login_mode == 0:
-                self.radioButton_2.setChecked(True)
-            else:
-                self.radioButton_3.setChecked(True)
+            # 更新UI状态
+            self.checkBox.setChecked(state.save_pwd == "1")
+            self.checkBox_2.setChecked(state.auto_connect == "1")
+            self.radioButton_2.setChecked(state.login_mode == 0)
+            self.radioButton_3.setChecked(state.login_mode != 0)
 
         except Exception as e:
-            print(f"配置读取失败，已重置为默认值！{e} ")
-            os.remove(self.config_path)
+            self.update_table(f"配置读取失败，已重置为默认值！{e} ")
+            os.remove(state.config_path)
             self.read_config()
+
         return config
 
     def update_config(self, variable, new_value, mode=None):
-        lines = []
-        with open(self.config_path, 'r+', encoding='utf-8') as file:
-            lines = file.readlines()
+        # delegate to config manager
+        update_entry(variable, str(new_value)
+                     if new_value is not None else None, state.config_path)
+        print(f"更新配置文件：[{variable}]={new_value}\n")
 
-        updated = False
-        seen_keys = set()  # 防止重复项
-
-        # 确保每个值都有 \n 结尾，并移除无效行
-        for i in range(len(lines)):
-            if not lines[i].endswith('\n'):
-                lines[i] += '\n'
-            if not lines[i].startswith('['):
-                lines[i] = ''  # 删除无效行
-
-        for i, line in enumerate(lines):
-            if '=' in line:
-                key, value = line.strip().split('=', 1)
-                key = key.strip('[]')
-                value = value.strip()
-
-                # 删除值为空的项
-                if not value:
-                    lines[i] = ''
-                    continue
-
-                if key == variable:  # 如果存在，则替换现有的值
-                    if new_value:  # 仅在新值非空时替换
-                        lines[i] = f"[{key}]={new_value}\n"
-                        updated = True
-                    else:
-                        lines[i] = ''  # 如果新值为空，则删除此项
-
-                    if key in seen_keys:
-                        lines[i] = ''
-                    seen_keys.add(key)
-
-                elif key in seen_keys:
-                    lines[i] = ''  # 删除重复项
-                else:
-                    seen_keys.add(key)  # 记录新项
-
-        # 如不存在且新值非空，则在文件末尾添加
-        if not updated and new_value:
-            lines.append(f"[{variable}]={new_value}\n")
-
-        # 过滤空行
-        lines = [line for line in lines if line.strip()]
-
-        with open(self.config_path, 'w+', encoding='utf-8') as file:
-            file.writelines(lines)
-
-        if mode != "w!":
+        if mode == "w!":
+            pass
+        else:
             self.read_config()
 
     def encrypt_rsa(self, message, pub_key):
@@ -422,9 +339,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         try:
             response = session.get(page_url, timeout=3, headers=headers, proxies={"http": None, "https": None})
-            print("成功获取登录URL")
+            self.update_table("成功获取登录URL")
         except Exception as e:
-            print(f"请求获取登录页面失败：{e}")
+            self.update_table(f"请求获取登录页面失败：{e}")
             return None
 
         try:
@@ -433,14 +350,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
             if url:
                 image_url = f'http://{state.esurfingurl}{url}'
-                print(f"获取验证码图片URL: {image_url}")
+                self.update_table(f"获取验证码图片URL: {image_url}")
                 return image_url
             else:
-                print("未找到验证码图片")
+                self.update_table("未找到验证码图片")
                 return None
 
         except Exception as e:
-            print(f"解析页面失败：{e}")
+            self.update_table(f"解析页面失败：{e}")
             self.run_settings()
             return None
     # 自动识别验证码
@@ -461,13 +378,13 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     # 使用正则表达式去除空格、换行和无关符号
                     code = re.sub(
                         r'[\s\.\:\(\)\[\]\{\}\-\+\!\@\#\$\%\^\&\￥\*\_\=\;\,\?\/]', '', code)
-                    print(f"识别出的验证码是：{code}")
+                    self.update_table(f"识别出的验证码是：{code}")
                     return code, image
                 else:
-                    print("无法获取验证码图片，状态码：", response.status_code)
+                    self.update_table("无法获取验证码图片，状态码：", response.status_code)
                     return None, None
             except Exception as e:
-                print(f"获取验证码图片失败：{e}")
+                self.update_table(f"获取验证码图片失败：{e}")
                 return None, None
         else:
             return None, None
@@ -485,16 +402,16 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         if state.esurfingurl == "0.0.0.0:0" or state.esurfingurl == "自动获取失败,请检查网线连接":
             self.run_settings()
-            print("请先获取或手动填写参数！")
+            self.update_table("请先获取或手动填写参数！")
             return
         if not state.username:
-            print("账号都不输入登录个锤子啊！")
+            self.update_table("账号都不输入登录个锤子啊！")
             return
         if not state.password or state.password == "0":
-            print("你账号没有密码的吗？？？")
+            self.update_table("你账号没有密码的吗？？？")
             return
         
-        print("即将登录: " + state.username + " IP: " + state.wlanuserip)
+        self.update_table("即将登录: " + state.username + " IP: " + state.wlanuserip)
 
         if not state.username.startswith('t') and state.login_mode == 0:  # 判断是否以 't' 开头，仅适用于SEIG
             self.login_jar(state.username, state.password, state.wlanuserip, state.wlanacip)
@@ -515,10 +432,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 if ok_pressed and cust_code:
                     code = cust_code
                 else:
-                    print("请输入验证码！")
+                    self.update_table("请输入验证码！")
                     return
             except Exception as e:
-                print("无法获取验证码:", e)
+                self.update_table("无法获取验证码:", e)
 
         pub_key = rsa.PublicKey.load_pkcs1_openssl_pem(rsa_public_key.encode())
 
@@ -553,7 +470,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 data = response.json()
                 if data['resultCode'] == "0" or data['resultCode'] == "13002000":
                     state.signature = response.cookies["signature"]
-                    print("成功连接校园网！")
+                    self.update_table("成功连接校园网！")
                     state.connected = True
 
                     self.check_new_version()
@@ -575,12 +492,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                         self.update_config("password", encrypted_password)
                     self.update_config("username", state.username)
                 elif data['resultCode'] == "13018000":
-                    print("已办理一人一号多终端业务的用户，请使用客户端登录")
+                    self.update_table("已办理一人一号多终端业务的用户，请使用客户端登录")
                 else:
-                    print(f"登录失败: {data['resultInfo']}")
+                    self.update_table(f"登录失败: {data['resultInfo']}")
 
                     if data['resultInfo'] == "用户认证失败":
-                        print("用户名或密码错误，请重新输入！")
+                        self.update_table("用户名或密码错误，请重新输入！")
                         self.thread_stop_flag = True
                         return
 
@@ -591,7 +508,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                             try:
                                 if state.retry_thread_started == False:
                                     state.connected = False
-                                    print("验证码识别错误，即将重试...")
+                                    self.update_table("验证码识别错误，即将重试...")
                                     self.thread = login_Thread(5,self)
                                     self.thread.signals.enable_buttoms.connect(
                                         self.enable_buttoms)
@@ -602,15 +519,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                                     self.thread.signals.print_text.connect(
                                         self.update_table)
                                     self.thread.signals.finished.connect(
-                                        lambda: print("结束线程"))
+                                        lambda: self.update_table("结束线程"))
                                     state.threadpool.start(self.thread)
                                     state.retry_thread_started = True
                             except:
                                 pass
             else:
-                print("请求失败，状态码：", response.status_code)
+                self.update_table("请求失败，状态码：", response.status_code)
         except Exception as e:
-            print(f"登录请求失败，请先获取配置并确保配置正确：{e}")
+            self.update_table(f"登录请求失败，请先获取配置并确保配置正确：{e}")
             state.connected = True
             self.run_settings()
 
@@ -634,7 +551,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.save_password)
             state.threadpool.start(self.jar_Thread)
         except Exception as e:
-            print(f"登录失败：{e}")
+            self.update_table(f"登录失败：{e}")
             self.enable_buttoms(1)
 
     def save_password(self):
@@ -651,7 +568,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 with open('logout.signal', 'w', encoding='utf-8') as file:
                     file.write("")
             jar_Thread.term_all_processes()
-            print("执行下线操作中, 请稍后...")
+            self.update_table("执行下线操作中, 请稍后...")
             state.jar_login = False
             return
 
@@ -672,18 +589,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 if response.status_code == 200:
                     data = response.json()
-                    print("成功发送下线请求")
+                    self.update_table("成功发送下线请求")
                     if data['resultCode'] == "0" or data['resultCode'] == "13002000":
                         state.stop_watch_dog = True
-                        print("下线成功")
+                        self.update_table("下线成功")
                     else:
-                        print(f"下线失败: {data['resultInfo']}")
+                        self.update_table(f"下线失败: {data['resultInfo']}")
                 else:
-                    print("请求失败，状态码：", response.status_code)
+                    self.update_table("请求失败，状态码：", response.status_code)
             except Exception as e:
-                print(f"下线失败：{e}")
+                self.update_table(f"下线失败：{e}")
         else:
-            print("您尚未登录，无需下线！")
+            self.update_table("您尚未登录，无需下线！")
 
     def enable_buttoms(self, mode):
         if mode == 0:
@@ -715,7 +632,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         self.listWidget.addItem(text)
         self.listWidget.setCurrentRow(self.listWidget.count() - 1)
-        self.global_print(text)
+        print(text)
 
     def check_new_version(self):
         self.update_thread = UpdateThread()
@@ -726,7 +643,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.update_table)
         self.update_thread.signals.logout.connect(self.logout)
         # self.update_thread.signals.finished.connect(
-        #     lambda: print("检查更新线程结束"))
+        #     lambda: self.update_table("检查更新线程结束"))
 
     def update_message(self, message):  # 更新弹窗
         msgBox = QMessageBox()
@@ -745,11 +662,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def change_login_mode(self, mode):
 
         if mode == 0:
-            print("已切换为自动识别模式")
+            self.update_table("已切换为自动识别模式")
             state.login_mode = 0
             self.update_config("login_mode", "0")
         elif mode == 1:
-            print("已切换为t模式")
+            self.update_table("已切换为t模式")
             state.login_mode = 1
             self.update_config("login_mode", "1")
 
