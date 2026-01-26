@@ -20,8 +20,8 @@ import webbrowser as web
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QApplication, QWidget, QInputDialog, QSystemTrayIcon, QMenu, QAction, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
 from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject, QTimer, QMutex
-from ui import Ui_MainWindow  # 导入ui文件
-from settings import Ui_sac_settings
+from Ui.Main_UI import Ui_MainWindow  # 导入ui文件
+from Ui.Settings import Ui_sac_settings
 
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
