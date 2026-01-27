@@ -18,7 +18,7 @@ class watch_dog(QRunnable):
         self._nlm = None
         self._reconnect_lock = threading.Lock()
         self.last_reconnect_ts = 0  # 上次重连时间
-        self.reconnect_cooldown = 10  # 重连冷却时间（秒）
+        self.reconnect_cooldown = 15  # 重连冷却时间（秒）
         self.nlm_check_count = 0  # NLM检查计数器
         self.check_interval = 3  # 检查间隔（秒）
         self.last_nlm_state = None  # 上次NLM状态，用于检测断网
@@ -74,16 +74,21 @@ class watch_dog(QRunnable):
             return False
         
         try:
+            ua =  (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/121.0.0.0 Safari/537.36"
+            )
+
             r = requests.head(
-                "http://www.baidu.com",
-                timeout=2,
+                "http://www.msftconnecttest.com/connecttest.txt",
+                timeout=(2, 6),
                 allow_redirects=False,
                 headers={
-                    "Cache-Control": "no-cache",
-                    "Pragma": "no-cache",
-                    "User-Agent": "Mozilla/5.0",
+                    "User-Agent": ua,
                 },
                 proxies={"http": "", "https": ""},
+                verify=False
             )
 
             if r.status_code in (301, 302, 303, 307, 308):
@@ -91,7 +96,9 @@ class watch_dog(QRunnable):
 
             return r.status_code == 200
 
-        except requests.RequestException:
+        except requests.RequestException as e:
+            current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            self.signals.print_text.emit(f"看门狗:网络断开，尝试重连...[{current_time}: {e}]")
             return False
     def try_reconnect(self):
         """尝试重连，有冷却时间"""
@@ -101,8 +108,6 @@ class watch_dog(QRunnable):
                 return False  # 冷却中
             
             self.last_reconnect_ts = now
-            current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            self.signals.print_text.emit(f"看门狗:网络断开，尝试重连...[{current_time}]")
             try:
                 self.signals.thread_login.emit()
                 return True
@@ -154,9 +159,10 @@ class watch_dog(QRunnable):
                     # 网卡未连接（禁用/网线拔出/WiFi断开），不做任何操作，等待网卡就绪
                     continue
                 
-                # NLM为True，每检查2次NLM就检查1次互联网连通性
+                # NLM为True，每检查self.check_internet_timeout次NLM就检查1次互联网连通性
                 if self.nlm_check_count % self.check_internet_timeout == 0:
                     internet_ok = self.check_internet_connected()
+                    print(internet_ok)
                     
                     if nlm_ok and internet_ok:
                         # 网络正常，无需操作
