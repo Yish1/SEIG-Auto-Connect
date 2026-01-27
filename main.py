@@ -213,28 +213,20 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         else:
             pass
+    
+    def reconnect(self):
+        '''重连调用此函数'''
+        if state.mulit_login == True:
+            self.settings_window.mulit_login_now()
+        else:
+            self.login()
 
     def mulit_login_mode(self, ip=None, user=None, pwd=None):
         try:
             self.login("mulit", ip, user, pwd)
+            state.mulit_login = True
         except Exception as e:
             self.update_table(e)
-        # try:
-        # state.threadpool = QThreadPool()
-        # self.auto_thread = login_Retry_Thread(2)
-        # self.auto_thread.signals.enable_buttoms.connect(
-        #     self.enable_buttoms)
-        # self.auto_thread.signals.show_input_dialog1.connect(
-        #     self.show_input_dialog)
-        # self.auto_thread.signals.thread_login.connect(lambda:self.login("mulit", ip, user, pwd))
-        # self.auto_thread.signals.finished.connect(
-        #     lambda: self.update_table("结束线程"))
-        # state.threadpool.start(self.auto_thread)
-        # state.retry_thread_started = True
-            # self.add_to_startup()
-        # except Exception as e:
-        #     self.update_table(e)
-
     def run_settings(self):
 
         if self.settings_window is not None:
@@ -415,7 +407,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         watchdog_thread.signals.print_text.connect(
             self.update_table)
         watchdog_thread.signals.thread_login.connect(
-            self.login)
+            self.reconnect)
         state.threadpool.start(watchdog_thread)
 
     def login_jar(self, username, password, userip, acip):
