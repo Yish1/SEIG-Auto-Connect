@@ -417,14 +417,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def run_watch_dog(self):
         state.stop_watch_dog = False
-        self.watchdog_thread = watch_dog()
-        self.watchdog_thread.signals.update_progress.connect(
+        watchdog_thread = watch_dog()
+        watchdog_thread.signals.update_progress.connect(
             self.update_progress_bar)
-        self.watchdog_thread.signals.print_text.connect(
+        watchdog_thread.signals.print_text.connect(
             self.update_table)
-        self.watchdog_thread.signals.thread_login.connect(
+        watchdog_thread.signals.thread_login.connect(
             self.login)
-        state.threadpool.start(self.watchdog_thread)
+        state.threadpool.start(watchdog_thread)
 
     def login_jar(self, username, password, userip, acip):
         self.update_table("即将登录: " + username + " IP: " + userip)

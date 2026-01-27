@@ -1,6 +1,7 @@
 import requests
 import time
-from PyQt5.QtCore import QThreadPool, pyqtSignal, QRunnable, QObject, QTimer, QMutex
+import socket
+from PyQt5.QtCore import QRunnable
 
 from modules.State import global_state
 from modules.Working_signals import WorkerSignals
@@ -11,12 +12,12 @@ class watch_dog(QRunnable):
     def __init__(self):
         super().__init__()
         self.signals = WorkerSignals()
-        try:
-            self.ping_timeout = state.watch_dog_timeout  # 默认设置超时时间
-        except:
-            self.ping_timeout = 300
             
         self.reconnect_timeout = 30
+        self.check_interval = 1
+        self.last_net_state = None
+        self.last_state_change_ts = 0
+        self.state_change_cooldown = 5
 
     def ping_baidu(self):
         try:
@@ -25,56 +26,85 @@ class watch_dog(QRunnable):
         except:
             return False
 
+    def quick_net_check(self):
+        try:
+            conn = socket.create_connection(("223.5.5.5", 53), timeout=1)
+            conn.close()
+            return True
+        except:
+            return False
+
+    def handle_state_change(self, is_up, original_interval):
+        if is_up:
+            self.signals.print_text.emit("看门狗:网络变化(恢复)，立即检测...")
+            if self.ping_baidu():
+                self.signals.print_text.emit("看门狗:网络正常无需操作")
+            return
+
+        self.signals.print_text.emit("看门狗:网络变化(断开)，立即检测...")
+        if not self.ping_baidu():
+            current_time = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime())
+            self.signals.print_text.emit(
+                f"看门狗:网络断开，重新登录...[{current_time}]")
+
+            try:
+                self.signals.thread_login.emit()
+            except Exception as e:
+                self.signals.print_text.emit(f"看门狗:登录失败: {e}")
+
     def run(self):
         # debugpy.breakpoint()
+        if state.watch_dog_thread_started == True:
+            print("看门狗:线程已启动无需再次启动")
+            return
 
-        original_interval = self.ping_timeout
-        if state.watch_dog_thread_started != True:
-            state.watch_dog_thread_started = True
-            self.signals.print_text.emit(
-                f"看门狗:已就位！每{self.ping_timeout}秒检测一次网络")
-            self.signals.update_progress.emit(1, 0, 100)
-            while True:
-                if state.stop_watch_dog:
+        state.watch_dog_thread_started = True
+        self.signals.print_text.emit("看门狗:正在实时监测网络状态")
+        self.signals.update_progress.emit(1, 0, 0)
+
+        self.last_net_state = self.quick_net_check()
+
+        while True:
+            if state.stop_watch_dog:
+                try:
                     self.signals.print_text.emit("看门狗:停止监测")
-                    break
+                except:
+                    pass
+                break
 
-                total_sleep_time = self.ping_timeout
-                step = 1
+            time.sleep(self.check_interval)
+            net_state = self.quick_net_check()
 
-                while total_sleep_time > 0:
-                    if state.stop_watch_dog:
-                        self.signals.print_text.emit("看门狗:停止监测")
-                        state.watch_dog_thread_started = False
-                        try:
-                            self.signals.update_progress.emit(0, 0, 0)
-                        except:
-                            self.signals.print_text.emit("信号槽已被删除")
-                        return
-                    time.sleep(step)
-                    total_sleep_time -= step
-                    progress_value = int(
-                        ((self.ping_timeout - total_sleep_time) / self.ping_timeout) * 100)
-                    try:
-                        self.signals.update_progress.emit(
-                            1, progress_value, 100)
-                    except:
-                        self.signals.print_text.emit("信号槽已被删除")
+            if net_state == self.last_net_state:
+                continue
 
-                if not self.ping_baidu():
-                    current_time = time.strftime(
-                        "%Y-%m-%d %H:%M:%S", time.localtime())
-                    self.signals.print_text.emit(
-                        f"看门狗:网络断开，重新登录...[{current_time}]")
-                    # 若断开超时改为60s
-                    self.ping_timeout = self.reconnect_timeout
-                    try:
-                        self.signals.thread_login.emit()
-                    except Exception as e:
-                        self.signals.print_text.emit(f"看门狗:登录失败: {e}")
-                else:
-                    # 恢复超时
-                    self.ping_timeout = original_interval
+            now = time.time()
+            self.last_net_state = net_state
+            if now - self.last_state_change_ts < self.state_change_cooldown:
+                continue
+
+            self.last_state_change_ts = now
+
+            if net_state:
+                self.signals.print_text.emit("看门狗:网络变化(恢复)，立即检测...")
+                if self.ping_baidu():
                     self.signals.print_text.emit("看门狗:网络正常无需操作")
-        else:
-            self.signals.print_text.emit("看门狗:线程已启动无需再次启动")
+                else:
+                    self.signals.print_text.emit("看门狗:网络异常，继续监测...")
+                continue
+
+            self.signals.print_text.emit("看门狗:网络变化(断开)，立即检测...")
+            
+            if not self.ping_baidu():
+                current_time = time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime())
+                self.signals.print_text.emit(
+                    f"看门狗:网络断开，重新登录...[{current_time}]")
+                try:
+                    self.signals.thread_login.emit()
+                except Exception as e:
+                    self.signals.print_text.emit(f"看门狗:登录失败: {e}")
+
+        state.watch_dog_thread_started = False
+        self.signals.update_progress.emit(0, 0, 0)
