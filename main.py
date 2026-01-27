@@ -217,7 +217,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.login()
                 return
 
-            self.auto_thread = login_Thread(5)
+            self.auto_thread = login_Retry_Thread(5)
             self.auto_thread.signals.enable_buttoms.connect(
                 self.enable_buttoms)
             self.auto_thread.signals.show_input_dialog1.connect(
@@ -240,7 +240,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.update_table(e)
         # try:
         # state.threadpool = QThreadPool()
-        # self.auto_thread = login_Thread(2)
+        # self.auto_thread = login_Retry_Thread(2)
         # self.auto_thread.signals.enable_buttoms.connect(
         #     self.enable_buttoms)
         # self.auto_thread.signals.show_input_dialog1.connect(
@@ -509,7 +509,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                                 if state.retry_thread_started == False:
                                     state.connected = False
                                     self.update_table("验证码识别错误，即将重试...")
-                                    self.thread = login_Thread(5,self)
+                                    self.thread = login_Retry_Thread(5,self)
                                     self.thread.signals.enable_buttoms.connect(
                                         self.enable_buttoms)
                                     self.thread.signals.show_input_dialog1.connect(
@@ -596,7 +596,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     else:
                         self.update_table(f"下线失败: {data['resultInfo']}")
                 else:
-                    self.update_table("请求失败，状态码：", response.status_code)
+                    self.update_table(f"请求失败，状态码：{response.status_code}")
             except Exception as e:
                 self.update_table(f"下线失败：{e}")
         else:
@@ -626,8 +626,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.progressBar.hide()
 
     def update_table(self, text):
-        # 超过 150 行，就清空列表
-        if self.listWidget.count() >= 150:
+        # 超过 500 行，就清空列表
+        if self.listWidget.count() >= 500:
             self.listWidget.clear()
 
         self.listWidget.addItem(text)
@@ -670,7 +670,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             state.login_mode = 1
             self.update_config("login_mode", "1")
 
-class login_Thread(QRunnable):
+class login_Retry_Thread(QRunnable):
     def __init__(self, times, parent=None):
         super().__init__()
         self.signals = WorkerSignals()
