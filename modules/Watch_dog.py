@@ -183,7 +183,7 @@ class watch_dog(QRunnable):
                 current_time = time.strftime(
                     "%Y-%m-%d %H:%M:%S", time.localtime())
                 # 检测网卡状态变化
-                if self.last_nlm_state == True and not nlm_ok:
+                if self.last_nlm_state == True and not nlm_ok and state.stop_watch_dog == False:
                     # 网卡断开（从True变为False）
                     self.signals.print_text.emit(
                         f"看门狗:网线被拔出(WLAN断开)或网卡被禁用[{current_time}]")
