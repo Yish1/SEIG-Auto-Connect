@@ -80,7 +80,7 @@ class watch_dog(QRunnable):
         if state.stop_watch_dog:
             return False
         try:
-            response = requests.head("http://www.baidu.com", timeout=3)
+            response = requests.head("http://www.baidu.com", timeout=3, proxies={"http": "", "https": ""})
             return response.status_code == 200
 
         except:
@@ -113,7 +113,10 @@ class watch_dog(QRunnable):
                     self.signals.thread_login.emit()
                 except Exception as e:
                     self.signals.print_text.emit(f"看门狗:登录失败: {e}")
-                    self.periodic_interval += 120  # 增加检查间隔，避免频繁重试
+
+                if state.connected == False and state.stop_retry_thread == False:
+                    # 增加检查间隔，避免频繁重试，最大不超过600秒
+                    self.periodic_interval = min(self.periodic_interval + 120, 600)
 
             elif network_ok and auth_ok:
                 self.signals.print_text.emit(f"看门狗:网络恢复正常[{current_time}]")
@@ -159,7 +162,7 @@ class watch_dog(QRunnable):
         # 尝试初始化NLM
         nlm_available, method = self._init_nlm()
         if nlm_available:
-            self.signals.print_text.emit(f"看门狗:正在持续监测网络状态...             (By:{method})")
+            self.signals.print_text.emit(f"看门狗:正在持续监测网络状态...             (using:{method})")
         else:
             self.signals.print_text.emit("看门狗:正在持续监测网络状态...              (By:Socket Test)")
         

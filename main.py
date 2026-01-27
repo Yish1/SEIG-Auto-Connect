@@ -322,6 +322,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 status = "登录成功"
                 state.signature = response.cookies["signature"]
                 state.connected = True
+                state.stop_retry_thread = False
 
                 self.check_new_version()
 
@@ -338,7 +339,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 if data['resultInfo'] == "用户认证失败" or data['resultInfo'] == "密码错误":
                     state.stop_watch_dog = True
-                    state.connected = True
+                    state.stop_retry_thread = True
                     if getattr(state, 'retry_thread_started') == True:
                         self.update_table("密码错误，取消自动重试")
                     return
@@ -557,7 +558,7 @@ class login_Retry_Thread(QRunnable):
         # debugpy.breakpoint()
         self.signals.enable_buttoms.emit(0)
         
-        while self.times > 0 and state.connected == False:
+        while self.times > 0 and state.stop_retry_thread == False:
             time.sleep(3)
             if state.connected == True:
                 state.retry_thread_started = False

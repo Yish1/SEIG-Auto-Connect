@@ -42,6 +42,7 @@ class global_state:
         self.jar_login = False
         self.signature = ""
         self.retry_thread_started = False
+        self.stop_retry_thread = False
         self.watch_dog_thread_started = False
         self.new_version_checked = False
         self.login_thread_finished = False
