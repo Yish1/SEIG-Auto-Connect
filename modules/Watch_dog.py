@@ -48,7 +48,7 @@ class watch_dog(QRunnable):
                     continue
 
             return False, None
-        
+
         except Exception as e:
             self.signals.print_text.emit(f"看门狗:NLM初始化失败: {e}")
             return False, None
@@ -72,9 +72,9 @@ class watch_dog(QRunnable):
         """检测互联网连通性（实际网络是否通）"""
         if state.stop_watch_dog:
             return False
-        
+
         try:
-            ua =  (
+            ua = (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/121.0.0.0 Safari/537.36"
@@ -98,15 +98,17 @@ class watch_dog(QRunnable):
 
         except requests.RequestException as e:
             current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            self.signals.print_text.emit(f"看门狗:网络断开，尝试重连...[{current_time}: {e}]")
+            self.signals.print_text.emit(
+                f"看门狗:网络断开，尝试重连...[{current_time}: {e}]")
             return False
+
     def try_reconnect(self):
         """尝试重连，有冷却时间"""
         with self._reconnect_lock:
             now = time.time()
             if now - self.last_reconnect_ts < self.reconnect_cooldown:
                 return False  # 冷却中
-            
+
             self.last_reconnect_ts = now
             try:
                 self.signals.thread_login.emit()
@@ -133,6 +135,7 @@ class watch_dog(QRunnable):
 
         try:
             self.signals.update_progress.emit(1, 0, 0)
+
         except Exception:
             pass
 
@@ -143,27 +146,35 @@ class watch_dog(QRunnable):
                     break
 
                 time.sleep(self.check_interval)  # 每3秒检查一次
-                
+
                 # 检查NLM IsConnected
                 nlm_ok = self.check_nlm_connected()
                 self.nlm_check_count += 1
-                
-                # 检测网卡断开事件（从True变为False）
+
+                current_time = time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime())
+                # 检测网卡状态变化
                 if self.last_nlm_state == True and not nlm_ok:
-                    current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-                    self.signals.print_text.emit(f"看门狗:网线被拔出(WLAN断开)或网卡被禁用[{current_time}]")
-                
+                    # 网卡断开（从True变为False）
+                    self.signals.print_text.emit(
+                        f"看门狗:网线被拔出(WLAN断开)或网卡被禁用[{current_time}]")
+
+                elif self.last_nlm_state == False and nlm_ok:
+                    # 网卡恢复（从False变为True）
+                    self.signals.print_text.emit(
+                        f"看门狗:网卡已恢复，正在检测网络连通性...[{current_time}]")
+
                 self.last_nlm_state = nlm_ok
-                
+
                 if not nlm_ok:
                     # 网卡未连接（禁用/网线拔出/WiFi断开），不做任何操作，等待网卡就绪
                     continue
-                
+
                 # NLM为True，每检查self.check_internet_timeout次NLM就检查1次互联网连通性
                 if self.nlm_check_count % self.check_internet_timeout == 0:
                     internet_ok = self.check_internet_connected()
-                    print(internet_ok)
-                    
+                    # print(internet_ok)
+
                     if nlm_ok and internet_ok:
                         # 网络正常，无需操作
                         pass
@@ -172,6 +183,7 @@ class watch_dog(QRunnable):
                         self.try_reconnect()
 
         finally:
+
             if self._nlm:
                 try:
                     pythoncom.CoUninitialize()
