@@ -72,8 +72,7 @@ class watch_dog(QRunnable):
         if state.stop_watch_dog:
             return False
         try:
-            conn = socket.create_connection(("223.5.5.5", 53), timeout=2)
-            conn.close()
+            socket.create_connection(("1.1.1.1", 443), timeout=2).close()
             return True
         except Exception:
             return False
