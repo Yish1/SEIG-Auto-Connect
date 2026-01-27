@@ -49,10 +49,11 @@ class watch_dog(QRunnable):
                 except Exception as e:
                     continue
 
-            return False
+            return False, None
+        
         except Exception as e:
             self.signals.print_text.emit(f"看门狗:NLM初始化失败: {e}")
-            return False
+            return False, None
 
     def check_network_layer(self):
         """检测网络层连通性"""
@@ -83,7 +84,7 @@ class watch_dog(QRunnable):
             return False
         try:
             response = requests.head(
-                "http://www.baidu.com", timeout=3, proxies={"http": "", "https": ""})
+                "http://www.baidu.com", timeout=3, allow_redirects=False, proxies={"http": "", "https": ""})
             return response.status_code == 200
 
         except:
@@ -143,7 +144,8 @@ class watch_dog(QRunnable):
         # 只在状态确实变化时处理
         if network_ok != self.last_net_state:
             self.last_net_state = network_ok
-            self.handle_connection_change(network_ok, auth_ok=True)
+            auth_ok = self.check_auth_layer()
+            self.handle_connection_change(network_ok, auth_ok)
 
     def _periodic_check(self):
         """定期检查"""
