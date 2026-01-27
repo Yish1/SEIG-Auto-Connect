@@ -14,7 +14,7 @@ state = global_state()
 
 class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
     def __init__(self, Main_window=None):
-        super().__init__()
+        super().__init__(Main_window)  # 设置父窗口
         central_widget = QtWidgets.QWidget(self)
         self.setCentralWidget(central_widget)
         self.setupUi(central_widget)
@@ -132,6 +132,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
                 index = self.tabWidget_2.currentIndex()
                 self.add_controls_to_tab(index)
                 self.add_new_tab("init")
+
         elif mode == 0:
             self.add_controls_to_tab(index)
 
@@ -163,7 +164,10 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
             line_edit.textChanged.connect(
                 lambda text, le=line_edit: self.on_text_changed(le, text))
             text = self.read_config(line_edit.objectName())
+
+            line_edit.blockSignals(True)
             line_edit.setText(text)
+            line_edit.blockSignals(False)
 
         # print(f"Layout and controls added to tab {current_tab.objectName()}")
 
@@ -248,11 +252,9 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
                     return
 
                 if index < len(state.mulit_info) - 1:
-                    QTimer.singleShot(500, lambda: start_login(index + 1))
+                    QTimer.singleShot(100, lambda: start_login(index + 1))
 
-                elif index == len(state.mulit_info) - 1:
-                    print(f"多拨线程执行完毕，共多拨 {len(state.mulit_info)} 次")
-
+                # elif index == len(state.mulit_info) - 1:
 
         # 启动登录过程
         start_login()
@@ -292,9 +294,8 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
             self.pushButton.setEnabled(False)
 
     def run_settings_window(self):
-        self.show()
-        return self
-
+        self.showNormal()  # 恢复窗口（如果被最小化）
+        self.activateWindow()  # 激活窗口
     def closeEvent(self, event):
         # print("设置被关闭")
 

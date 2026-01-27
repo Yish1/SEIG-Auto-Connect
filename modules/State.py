@@ -41,13 +41,23 @@ class global_state:
         self.connected = False
         self.jar_login = False
         self.signature = ""
-        self.settings_flag = None
         self.retry_thread_started = False
         self.watch_dog_thread_started = False
         self.new_version_checked = False
         self.login_thread_finished = False
+        self.mulit_status = {}
 
         # 初始化线程池
         self.threadpool = QThreadPool()
 
+        # RSA公钥
+        self.rsa_public_key = """
+            -----BEGIN PUBLIC KEY-----
+            MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCyhncn4Z4RY8wITqV7n6hAapEM
+            ZwNBP6fflsGs3Ke5g6Ji4AWvNflIXZLNTGIuykoU1v2Bitylyuc9nSKLTvBdcytB
+            +4X4CvV4oVDr2aLrXs7LhTNyykcxyhyGhokph0Cb4yR/mybK6OeH2ME1/AZS7AZ4
+            pe2gw9lcwXQVF8DJwwIDAQAB
+            -----END PUBLIC KEY-----
+            """
+        
 app_state = global_state()

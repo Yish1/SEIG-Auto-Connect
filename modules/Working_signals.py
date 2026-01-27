@@ -13,3 +13,5 @@ class WorkerSignals(QObject):
     update_check = pyqtSignal()
     logout = pyqtSignal()
     jar_login_success = pyqtSignal()
+    login_status = pyqtSignal(object)
+    run_settings = pyqtSignal()
