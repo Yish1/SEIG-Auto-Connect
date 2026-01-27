@@ -520,6 +520,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         print(text)
 
     def check_new_version(self):
+        if state.new_version_checked: return
+        
         self.update_thread = UpdateThread()
         state.threadpool.start(self.update_thread)
         self.update_thread.signals.show_message.connect(

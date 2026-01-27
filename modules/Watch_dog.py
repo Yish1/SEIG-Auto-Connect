@@ -68,39 +68,68 @@ class watch_dog(QRunnable):
                 self.signals.print_text.emit(f"看门狗:NLM查询失败: {e}")
         return False
 
+    # 公网连通性检测地址列表
+    CONNECTIVITY_CHECK_URLS = [
+        # (url, expected_status, method)
+        ("http://www.msftconnecttest.com/connecttest.txt", 200, "HEAD"),
+        ("http://connectivitycheck.gstatic.com/generate_204", 204, "GET"),
+        ("http://www.google.cn/generate_204", 204, "GET"),
+        ("http://captive.apple.com/hotspot-detect.html", 200, "HEAD"),
+        ("http://connect.rom.miui.com/generate_204", 204, "GET"),
+        ("http://wifi.vivo.com.cn/generate_204", 204, "GET"),
+    ]
+
     def check_internet_connected(self):
-        """检测互联网连通性（实际网络是否通）"""
+        """
+        检测互联网连通性（实际网络是否通）
+        使用多个公网检测地址，有一个通就算通，避免单点故障
+        """
         if state.stop_watch_dog:
             return False
 
-        try:
-            ua = (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/121.0.0.0 Safari/537.36"
-            )
+        ua = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/121.0.0.0 Safari/537.36"
+        )
+        headers = {"User-Agent": ua}
 
-            r = requests.head(
-                "http://www.msftconnecttest.com/connecttest.txt",
-                timeout=(2, 6),
-                allow_redirects=False,
-                headers={
-                    "User-Agent": ua,
-                },
-                proxies={"http": "", "https": ""},
-                verify=False
-            )
+        # 尝试多个检测地址，有一个成功就返回True
+        for url, expected_status, method in self.CONNECTIVITY_CHECK_URLS:
+            try:
+                if method == "HEAD":
+                    r = requests.head(
+                        url,
+                        timeout=(2, 4),
+                        allow_redirects=False,
+                        headers=headers,
+                        proxies={"http": "", "https": ""},
+                        verify=False
+                    )
+                else:
+                    r = requests.get(
+                        url,
+                        timeout=(2, 4),
+                        allow_redirects=False,
+                        headers=headers,
+                        proxies={"http": "", "https": ""},
+                        verify=False
+                    )
 
-            if r.status_code in (301, 302, 303, 307, 308):
-                return False
+                # 检查是否被重定向（通常是认证页面）
+                if r.status_code in (301, 302, 303, 307, 308):
+                    continue  # 被重定向，尝试下一个
 
-            return r.status_code == 200
+                if r.status_code == expected_status:
+                    return True  # 有一个通就算通
 
-        except requests.RequestException as e:
-            current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            self.signals.print_text.emit(
-                f"看门狗:网络断开，尝试重连...[{current_time}: {e}]")
-            return False
+            except requests.RequestException:
+                continue  # 超时或其他错误，尝试下一个
+
+        # 所有检测地址都失败
+        current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        self.signals.print_text.emit(f"看门狗:所有网络检测点均不可达[{current_time}]")
+        return False
 
     def try_reconnect(self):
         """尝试重连，有冷却时间"""
@@ -173,7 +202,7 @@ class watch_dog(QRunnable):
                 # NLM为True，每检查self.check_internet_timeout次NLM就检查1次互联网连通性
                 if self.nlm_check_count % self.check_internet_timeout == 0:
                     internet_ok = self.check_internet_connected()
-                    # print(internet_ok)
+                    print("网络测试:", internet_ok)
 
                     if nlm_ok and internet_ok:
                         # 网络正常，无需操作
