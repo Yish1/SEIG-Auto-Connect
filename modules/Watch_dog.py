@@ -56,14 +56,18 @@ class watch_dog(QRunnable):
             return False, None
 
     def check_network_layer(self):
-        """检测网络层连通性"""
+        """检测网络层连通性（网卡是否就绪，不要求互联网连通）"""
         if state.stop_watch_dog:
             return False
         # 优先使用NLM
         if self._nlm:
             try:
-                if hasattr(self._nlm, 'IsConnectedToInternet'):
-                    return bool(self._nlm.IsConnectedToInternet)
+                # 使用 IsConnected 而非 IsConnectedToInternet
+                # IsConnected: 网卡连接到任何网络（局域网也算）
+
+                if hasattr(self._nlm, 'IsConnected'):
+                    return bool(self._nlm.IsConnected)
+                
                 elif hasattr(self._nlm, 'GetNetworkConnections'):
                     connections = self._nlm.GetNetworkConnections()
                     return connections and connections.Count > 0
@@ -111,6 +115,7 @@ class watch_dog(QRunnable):
                 self.signals.print_text.emit(
                     f"看门狗:网线被拔出(WLAN断开)或网卡被禁用[{current_time}]")
                 self.periodic_interval = 10
+                
                 return  # 网络物理断开时不重连
 
             if network_ok and not auth_ok:
@@ -163,8 +168,16 @@ class watch_dog(QRunnable):
         self.last_periodic_check_ts = now
         network_ok, auth_ok = self.diagnose_connection()
 
-        # 定期检查只关心认证层问题
-        if network_ok and not auth_ok:
+        # 检测网络层从离线恢复到在线的情况
+        if network_ok and self.last_net_state == False:
+            # 网络层刚恢复，更新状态并触发处理
+            current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            self.signals.print_text.emit(f"看门狗:检测到网络层恢复[{current_time}]")
+            self.last_net_state = True
+            self.handle_connection_change(network_ok, auth_ok)
+
+        # 定期检查认证层问题
+        elif network_ok and not auth_ok:
             self.handle_connection_change(network_ok, auth_ok)
 
     def run(self):
