@@ -204,8 +204,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.auto_thread = login_Retry_Thread(5)
             self.auto_thread.signals.enable_buttoms.connect(
                 self.enable_buttoms)
-            self.auto_thread.signals.show_input_dialog1.connect(
-                self.show_input_dialog)
             self.auto_thread.signals.thread_login.connect(self.login)
             self.auto_thread.signals.finished.connect(
                 lambda: self.update_table("结束自动登录线程"))
@@ -349,6 +347,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 if data['resultInfo'] == "用户认证失败" or data['resultInfo'] == "密码错误":
                     state.stop_watch_dog = True
                     state.connected = True
+                    if getattr(state, 'retry_thread_started') == True:
+                        self.update_table("密码错误，取消自动重试")
                     return
 
                 if data['resultInfo'] == "验证码错误":
@@ -359,18 +359,16 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                             if state.retry_thread_started == False:
                                 state.connected = False
                                 self.update_table("验证码识别错误，即将重试...")
-                                self.thread = login_Retry_Thread(5,self)
-                                self.thread.signals.enable_buttoms.connect(
+                                self.retry_thread = login_Retry_Thread(5,self)
+                                self.retry_thread.signals.enable_buttoms.connect(
                                     self.enable_buttoms)
-                                self.thread.signals.show_input_dialog1.connect(
-                                    self.show_input_dialog)
-                                self.thread.signals.thread_login.connect(
+                                self.retry_thread.signals.thread_login.connect(
                                     self.login)
-                                self.thread.signals.print_text.connect(
+                                self.retry_thread.signals.print_text.connect(
                                     self.update_table)
-                                self.thread.signals.finished.connect(
-                                    lambda: self.update_table("结束线程"))
-                                state.threadpool.start(self.thread)
+                                self.retry_thread.signals.finished.connect(
+                                    lambda: self.update_table("结束RETRY线程"))
+                                state.threadpool.start(self.retry_thread)
                                 state.retry_thread_started = True
                         except Exception as e:
                             print(e)
@@ -397,8 +395,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         login_thread = login_Thread()
         login_thread.signals.enable_buttoms.connect(
             self.enable_buttoms)
-        login_thread.signals.show_input_dialog1.connect(
-            self.show_input_dialog)
         login_thread.signals.thread_login.connect(
             self.login)
         login_thread.signals.print_text.connect(
@@ -408,9 +404,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         login_thread.signals.run_settings.connect(
             self.run_settings)
         login_thread.signals.finished.connect(
-            lambda: self.update_table("结束线程"))
+            lambda: self.update_table("结束登录线程"))
         state.threadpool.start(login_thread)
-        state.retry_thread_started = True
 
     def run_watch_dog(self):
         state.stop_watch_dog = False
@@ -505,9 +500,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.pushButton.setEnabled(True)
             self.pushButton_2.setEnabled(True)
 
-    def show_input_dialog(self):
-        self.login(1)
-
     def update_progress_bar(self, mode, value, value2):
         self.progressBar.setValue(value)
         self.progressBar.setMaximum(value2)
@@ -573,7 +565,7 @@ class login_Retry_Thread(QRunnable):
         # debugpy.breakpoint()
         self.signals.enable_buttoms.emit(0)
         
-        while self.times > 0:
+        while self.times > 0 and state.connected == False:
             time.sleep(3)
             if state.connected == True:
                 state.retry_thread_started = False
@@ -594,9 +586,8 @@ class login_Retry_Thread(QRunnable):
             
         if state.connected == False:
             state.retry_thread_started = False
-            self.signals.print_text.emit("已多次尝试无法获取验证码，请手动输入验证码、重试或联系Yish_")
-            if self.times == 0:
-                self.signals.show_input_dialog1.emit()
+            self.signals.print_text.emit("已多次尝试无法获取验证码，这一般不是验证码的问题，请重试或者反馈")
+
         self.signals.enable_buttoms.emit(1)
         self.signals.finished.emit()
 

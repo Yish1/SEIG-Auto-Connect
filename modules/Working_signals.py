@@ -4,7 +4,6 @@ class WorkerSignals(QObject):
     # 定义信号
     finished = pyqtSignal()
     enable_buttoms = pyqtSignal(int)
-    show_input_dialog1 = pyqtSignal()
     thread_login = pyqtSignal()
     update_progress = pyqtSignal(int, int, int)
     connected_success = pyqtSignal()
