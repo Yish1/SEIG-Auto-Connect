@@ -96,6 +96,10 @@ class watch_dog(QRunnable):
 
         # 尝试多个检测地址，有一个成功就返回True
         for url, expected_status, method in self.CONNECTIVITY_CHECK_URLS:
+
+            if state.stop_retry_thread:
+                return False
+            
             try:
                 if method == "HEAD":
                     r = requests.head(
@@ -134,6 +138,9 @@ class watch_dog(QRunnable):
     def try_reconnect(self):
         """尝试重连，有冷却时间"""
         with self._reconnect_lock:
+            if state.stop_watch_dog:
+                return False
+            
             now = time.time()
             if now - self.last_reconnect_ts < self.reconnect_cooldown:
                 return False  # 冷却中
@@ -171,7 +178,12 @@ class watch_dog(QRunnable):
         try:
             while True:
                 if state.stop_watch_dog:
-                    self.signals.print_text.emit("看门狗:停止监测")
+                    
+                    try:
+                        self.signals.print_text.emit("看门狗:停止监测")
+                    except:
+                        pass
+
                     break
 
                 time.sleep(self.check_interval)  # 每3秒检查一次
@@ -195,12 +207,12 @@ class watch_dog(QRunnable):
 
                 self.last_nlm_state = nlm_ok
 
-                if not nlm_ok:
+                if not nlm_ok or state.stop_watch_dog:
                     # 网卡未连接（禁用/网线拔出/WiFi断开），不做任何操作，等待网卡就绪
                     continue
 
                 # NLM为True，每检查self.check_internet_timeout次NLM就检查1次互联网连通性
-                if self.nlm_check_count % self.check_internet_timeout == 0:
+                if self.nlm_check_count % self.check_internet_timeout == 0 :
                     internet_ok = self.check_internet_connected()
                     print("网络测试:", internet_ok)
 
