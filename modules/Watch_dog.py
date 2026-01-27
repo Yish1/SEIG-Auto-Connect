@@ -1,8 +1,8 @@
 import time
-import socket
 import threading
 import pythoncom
 import win32com.client
+import requests
 from PyQt5.QtCore import QRunnable
 
 from modules.State import global_state
@@ -67,13 +67,17 @@ class watch_dog(QRunnable):
                 self.signals.print_text.emit(f"看门狗:NLM查询失败: {e}")
         return False
 
-    def check_socket_connected(self):
-        """检测socket连通性（实际网络是否通）"""
+    def check_internet_connected(self):
+        """检测互联网连通性（实际网络是否通）"""
         if state.stop_watch_dog:
             return False
         try:
-            socket.create_connection(("1.1.1.1", 443), timeout=2).close()
-            return True
+            response = requests.get(
+                "http://www.msftconnecttest.com/connecttest.txt",
+                timeout=3,
+                proxies={"http": "", "https": ""}
+            )
+            return response.status_code == 200
         except Exception:
             return False
 
@@ -138,15 +142,15 @@ class watch_dog(QRunnable):
                     # 网卡未连接（禁用/网线拔出/WiFi断开），不做任何操作，等待网卡就绪
                     continue
                 
-                # NLM为True，每检查2次NLM就检查1次socket
+                # NLM为True，每检查2次NLM就检查1次互联网连通性
                 if self.nlm_check_count % 2 == 0:
-                    socket_ok = self.check_socket_connected()
+                    internet_ok = self.check_internet_connected()
                     
-                    if nlm_ok and socket_ok:
+                    if nlm_ok and internet_ok:
                         # 网络正常，无需操作
                         pass
-                    elif nlm_ok and not socket_ok:
-                        # NLM通但socket不通，需要重连
+                    elif nlm_ok and not internet_ok:
+                        # NLM通但互联网不通，需要重连
                         self.try_reconnect()
 
         finally:
