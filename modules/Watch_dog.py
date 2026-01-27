@@ -63,7 +63,7 @@ class watch_dog(QRunnable):
         if self._nlm:
             try:
                 if hasattr(self._nlm, 'IsConnectedToInternet'):
-                    return bool(self._nlm.IsConnectedToInternet())
+                    return bool(self._nlm.IsConnectedToInternet)
                 elif hasattr(self._nlm, 'GetNetworkConnections'):
                     connections = self._nlm.GetNetworkConnections()
                     return connections and connections.Count > 0
