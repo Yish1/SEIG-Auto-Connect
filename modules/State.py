@@ -2,6 +2,7 @@
 import os
 from PyQt5.QtCore import QThreadPool
 
+
 class global_state:
     _instance = None
 
@@ -16,10 +17,11 @@ class global_state:
         self._initialized = True
 
         self.version = 1.5
-        
+
         # 获取用户 AppData\Roaming 路径
         self.config_path = None
-        appdata_dir = os.getenv("APPDATA")  # 通常是 C:\Users\<用户名>\AppData\Roaming
+        # 通常是 C:\Users\<用户名>\AppData\Roaming
+        appdata_dir = os.getenv("APPDATA")
         config_dir = os.path.join(appdata_dir, "SAC")
         self.config_path = os.path.join(config_dir, "config.ini")
 
@@ -46,7 +48,7 @@ class global_state:
         self.watch_dog_thread_started = False
         self.new_version_checked = False
         self.login_thread_finished = False
-        self.mulit_status = {} 
+        self.mulit_status = {}
         self.mulit_login = False
 
         # 初始化线程池
@@ -61,5 +63,6 @@ class global_state:
             pe2gw9lcwXQVF8DJwwIDAQAB
             -----END PUBLIC KEY-----
             """
-        
+
+
 app_state = global_state()

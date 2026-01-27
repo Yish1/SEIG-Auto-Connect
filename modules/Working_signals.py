@@ -1,5 +1,6 @@
 from PyQt5.QtCore import QObject, pyqtSignal
 
+
 class WorkerSignals(QObject):
     # 定义信号
     finished = pyqtSignal()

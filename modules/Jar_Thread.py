@@ -70,6 +70,7 @@ class jar_Thread(QRunnable):
 
             self.signals.print_text.emit(f"进程 {pid} 启动成功！")
             # 处理子进程的输出
+
             def read_output():
                 while True:
                     output = self.process.stdout.readline()
@@ -88,12 +89,14 @@ class jar_Thread(QRunnable):
                             state.connected = True
                             self.signals.print_text.emit(
                                 f"{pid}: 登录成功！即将发送心跳... :)")
-                            self.signals.print_text.emit(f"{pid}:『只要心跳仍在，我们就不会掉线』")
+                            self.signals.print_text.emit(
+                                f"{pid}:『只要心跳仍在，我们就不会掉线』")
                             # 发送保存密码信号
                             self.signals.jar_login_success.emit()
 
                         if "Send Keep Packet" in output:
-                            self.signals.print_text.emit(f"{pid}: 心跳成功，请不要关闭此程序，\n需要每480秒心跳保持连接！")
+                            self.signals.print_text.emit(
+                                f"{pid}: 心跳成功，请不要关闭此程序，\n需要每480秒心跳保持连接！")
                             self.signals.update_check.emit()
 
                         if "KeepUrl is empty" in output:
@@ -101,7 +104,7 @@ class jar_Thread(QRunnable):
                             self.signals.print_text.emit(
                                 f"{pid}: 登录失败，账号或密码错误！")
                             # self.signals.update_check.emit()
-                        
+
                         state.login_thread_finished = True
                         self.signals.enable_buttoms.emit(1)
 
@@ -152,7 +155,7 @@ class jar_Thread(QRunnable):
                 jar_Thread.lock.unlock()
                 state.login_thread_finished = True
                 jar_Thread.mainWindow.enable_buttoms(1)
-                
+
                 try:
                     os.remove("logout.signal")
                 except FileNotFoundError:

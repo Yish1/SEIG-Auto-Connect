@@ -12,6 +12,7 @@ from modules.State import global_state
 
 state = global_state()
 
+
 class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
     def __init__(self, Main_window=None):
         super().__init__(Main_window)  # 设置父窗口
@@ -62,7 +63,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
                 self.show_message(f"清除配置失败: {e}", "错误")
         else:
             print("用户取消了清除配置操作")
-            
+
     def add_new_tab(self, mode=None):
 
         def add_new_tab_func():
@@ -275,7 +276,8 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
             response = requests.get(url="http://189.cn/", timeout=2)
             state.esurfingurl = re.search(
                 "http://(.+?)/", response.url).group(1)
-            state.wlanacip = re.search("wlanacip=(.+?)&", response.url).group(1)
+            state.wlanacip = re.search(
+                "wlanacip=(.+?)&", response.url).group(1)
             state.wlanuserip = re.search(
                 "wlanuserip=(.+)", response.url).group(1)
             self.get_config_value()
@@ -296,6 +298,7 @@ class settingsWindow(QtWidgets.QMainWindow, Ui_sac_settings):  # 设置窗口
     def run_settings_window(self):
         self.showNormal()  # 恢复窗口（如果被最小化）
         self.activateWindow()  # 激活窗口
+
     def closeEvent(self, event):
         # print("设置被关闭")
 

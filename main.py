@@ -29,6 +29,7 @@ state = global_state()
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # 等待调试器连接
 
+
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def setupUi(self, MainWindow):
         super().setupUi(MainWindow)
@@ -49,14 +50,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         # 连接单击托盘图标的事件
         self.tray_icon.activated.connect(self.on_tray_icon_clicked)
 
-
         # 托盘菜单
         tray_menu = QMenu(self)
         restore_action = QAction("恢复", self)
         quit_action = QAction("退出", self)
         self.close_now = False
         restore_action.triggered.connect(self.showNormal)
-        quit_action.triggered.connect(lambda: (setattr(self, 'close_now', True), self.close()))
+        quit_action.triggered.connect(
+            lambda: (setattr(self, 'close_now', True), self.close()))
 
         tray_menu.addAction(restore_action)
         tray_menu.addAction(quit_action)
@@ -88,8 +89,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.run_settings_action.triggered.connect(self.run_settings)
         self.pushButton_4.clicked.connect(self.settings_window.mulit_login_now)
 
-        self.radioButton_2.toggled.connect(lambda checked: checked and self.change_login_mode(0))
-        self.radioButton_3.toggled.connect(lambda checked: checked and self.change_login_mode(1))
+        self.radioButton_2.toggled.connect(
+            lambda checked: checked and self.change_login_mode(0))
+        self.radioButton_3.toggled.connect(
+            lambda checked: checked and self.change_login_mode(1))
 
         self.update_table("感谢您使用此工具！\n请不要在任何大型社交平台\n(B站、贴吧、小红书、狐友等)\n讨论此工具！")
 
@@ -97,7 +100,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if reason == QSystemTrayIcon.Trigger:  # 仅响应左键单击
             self.showNormal()
             self.activateWindow()
-            
+
     def changeEvent(self, event):
         if event.type() == QtCore.QEvent.WindowStateChange:
             if self.isMinimized():
@@ -146,6 +149,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             pass
         state.stop_watch_dog = True
         event.accept()
+
     def init_save_password(self):
         if state.save_pwd == "1" and state.password:
             decrypted_password = ''.join(
@@ -213,7 +217,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         else:
             pass
-    
+
     def reconnect(self):
         '''重连调用此函数'''
         if state.mulit_login == True:
@@ -227,6 +231,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             state.mulit_login = True
         except Exception as e:
             self.update_table(e)
+
     def run_settings(self):
 
         if self.settings_window is not None:
@@ -287,9 +292,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         else:
             self.read_config()
 
-
     def login(self, mode=None, ip=None, user=None, pwd=None):
-        
+
         state.username = self.lineEdit.text()
         state.password = self.lineEdit_2.text()
 
@@ -309,9 +313,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if not state.password or state.password == "0":
             self.update_table("你账号没有密码的吗？？？")
             return
-        
-        if not state.username.startswith('t') and state.login_mode == 0:  # 判断是否以 't' 开头，仅适用于SEIG
-            self.login_jar(state.username, state.password, state.wlanuserip, state.wlanacip)
+
+        # 判断是否以 't' 开头，仅适用于SEIG
+        if not state.username.startswith('t') and state.login_mode == 0:
+            self.login_jar(state.username, state.password,
+                           state.wlanuserip, state.wlanacip)
             state.jar_login = True
             return
 
@@ -352,7 +358,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                             if state.retry_thread_started == False:
                                 state.connected = False
                                 self.update_table("验证码识别错误，即将重试...")
-                                self.retry_thread = login_Retry_Thread(5,self)
+                                self.retry_thread = login_Retry_Thread(5, self)
                                 self.retry_thread.signals.enable_buttoms.connect(
                                     self.enable_buttoms)
                                 self.retry_thread.signals.thread_login.connect(
@@ -372,13 +378,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 if len(state.mulit_status) == len(state.mulit_info):
                     self.update_table("***多拨登录结果汇总***")
                     success = False
-                    
+
                     for ip, stat in state.mulit_status.items():
                         self.update_table(f"{ip} : {stat}")
-                        if stat == "登录成功": success = True
+                        if stat == "登录成功":
+                            success = True
 
                     state.mulit_status = {}
-                    if success : self.run_watch_dog()
+                    if success:
+                        self.run_watch_dog()
 
             else:
                 # 保存账号密码
@@ -419,7 +427,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         except:
             pass
         try:
-            self.jar_Thread = jar_Thread(username, password, userip, acip, mainWindow=self)
+            self.jar_Thread = jar_Thread(
+                username, password, userip, acip, mainWindow=self)
             self.jar_Thread.signals.enable_buttoms.connect(self.enable_buttoms)
             # self.jar_Thread.signals.connected_success.connect(
             #     self.update_progress_bar)
@@ -461,8 +470,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
                     },
                     data=f"wlanuserip={state.wlanuserip}&wlanacip={state.wlanacip}",
-                    timeout=3, 
-                    proxies={"http": None, "https": None}, 
+                    timeout=3,
+                    proxies={"http": None, "https": None},
                     verify=False
                 )
 
@@ -546,6 +555,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             state.login_mode = 1
             self.update_config("login_mode", "1")
 
+
 class login_Retry_Thread(QRunnable):
     def __init__(self, times, parent=None):
         super().__init__()
@@ -557,7 +567,7 @@ class login_Retry_Thread(QRunnable):
 
         # debugpy.breakpoint()
         self.signals.enable_buttoms.emit(0)
-        
+
         while self.times > 0 and state.stop_retry_thread == False:
             time.sleep(3)
             if state.connected == True:
@@ -576,7 +586,7 @@ class login_Retry_Thread(QRunnable):
             self.signals.print_text.emit(f"登录失败,还剩{self.times}次尝试")
             self.times -= 1
             self.signals.thread_login.emit()
-            
+
         if state.connected == False:
             state.retry_thread_started = False
             self.signals.print_text.emit("已多次尝试无法获取验证码，这一般不是验证码的问题，请重试或者反馈")
@@ -605,7 +615,6 @@ if __name__ == "__main__":
                 sys.exit()  # 退出程序
             elif result == 1:
                 print("用户选择继续运行。")
-
 
         # 启用 Windows DPI 感知（优先 Per-Monitor V2，回退到 System Aware）
         if sys.platform == "win32":
@@ -650,7 +659,7 @@ if __name__ == "__main__":
         if hasattr(QtCore.Qt, "AA_UseHighDpiPixmaps"):
             QtWidgets.QApplication.setAttribute(
                 QtCore.Qt.AA_UseHighDpiPixmaps, True)
-            
+
         app = QtWidgets.QApplication(sys.argv)
         mainWindow = MainWindow()
         mainWindow.show()

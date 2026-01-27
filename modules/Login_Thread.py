@@ -21,14 +21,17 @@ class login_Thread(QRunnable):
     def __init__(self):
         super().__init__()
         self.signals = WorkerSignals()
+
     def run(self):
-        self.signals.print_text.emit("即将登录: " + state.username + " IP: " + state.wlanuserip)
+        self.signals.print_text.emit(
+            "即将登录: " + state.username + " IP: " + state.wlanuserip)
 
         session = requests.session()
 
         code, image = self.show_captcha_and_input_code(session)
 
-        pub_key = rsa.PublicKey.load_pkcs1_openssl_pem(state.rsa_public_key.encode())
+        pub_key = rsa.PublicKey.load_pkcs1_openssl_pem(
+            state.rsa_public_key.encode())
 
         # 登录数据
         login_data = {
@@ -64,8 +67,9 @@ class login_Thread(QRunnable):
                 self.signals.login_status.emit(response)
 
             else:
-                self.signals.print_text.emit(f"请求失败，状态码：{response.status_code}")
-                
+                self.signals.print_text.emit(
+                    f"请求失败，状态码：{response.status_code}")
+
         except Exception as e:
             self.signals.print_text.emit(f"登录请求失败，请先获取配置并确保配置正确：{e}")
             state.connected = True
@@ -96,7 +100,8 @@ class login_Thread(QRunnable):
         }
 
         try:
-            response = session.get(page_url, timeout=3, headers=headers, proxies={"http": None, "https": None})
+            response = session.get(page_url, timeout=3, headers=headers, proxies={
+                                   "http": None, "https": None})
             self.signals.print_text.emit("成功获取登录URL")
         except Exception as e:
             self.signals.print_text.emit(f"请求获取登录页面失败：{e}")
@@ -125,10 +130,11 @@ class login_Thread(QRunnable):
 
         if image_code_url:
             try:
-                response = session.get(image_code_url, timeout=3, proxies={"http": None, "https": None}, verify=False)
+                response = session.get(image_code_url, timeout=3, proxies={
+                                       "http": None, "https": None}, verify=False)
                 if response.status_code == 200:
                     image = Image.open(BytesIO(response.content))
-                    ocr = ddddocr.DdddOcr(show_ad = False)
+                    ocr = ddddocr.DdddOcr(show_ad=False)
                     processed_image = self.preprocess_image(image)
                     # image.show()
                     code = ocr.classification(processed_image)
@@ -139,7 +145,8 @@ class login_Thread(QRunnable):
                     self.signals.print_text.emit(f"识别出的验证码是：{code}")
                     return code, image
                 else:
-                    self.signals.print_text.emit(f"无法获取验证码图片，状态码：{response.status_code}")
+                    self.signals.print_text.emit(
+                        f"无法获取验证码图片，状态码：{response.status_code}")
                     return None, None
             except Exception as e:
                 self.signals.print_text.emit(f"获取验证码图片失败：{e}")
