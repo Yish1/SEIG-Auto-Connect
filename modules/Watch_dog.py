@@ -72,16 +72,27 @@ class watch_dog(QRunnable):
         """检测互联网连通性（实际网络是否通）"""
         if state.stop_watch_dog:
             return False
+        
         try:
-            response = requests.get(
-                "http://www.msftconnecttest.com/connecttest.txt",
-                timeout=3,
-                proxies={"http": "", "https": ""}
+            r = requests.head(
+                "http://www.baidu.com",
+                timeout=2,
+                allow_redirects=False,
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                    "User-Agent": "Mozilla/5.0",
+                },
+                proxies={"http": "", "https": ""},
             )
-            return response.status_code == 200
-        except Exception:
-            return False
 
+            if r.status_code in (301, 302, 303, 307, 308):
+                return False
+
+            return r.status_code == 200
+
+        except requests.RequestException:
+            return False
     def try_reconnect(self):
         """尝试重连，有冷却时间"""
         with self._reconnect_lock:
