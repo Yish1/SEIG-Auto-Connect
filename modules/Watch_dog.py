@@ -109,6 +109,7 @@ class watch_dog(QRunnable):
             if not network_ok:
                 self.signals.print_text.emit(
                     f"看门狗:网线被拔出(WLAN断开)或网卡被禁用[{current_time}]")
+                self.periodic_interval = 10
                 return  # 网络物理断开时不重连
 
             if network_ok and not auth_ok:
@@ -126,6 +127,7 @@ class watch_dog(QRunnable):
 
             elif network_ok and auth_ok:
                 self.signals.print_text.emit(f"看门狗:网络恢复正常[{current_time}]")
+                self.periodic_interval = state.watch_dog_timeout
 
     def _on_network_change(self):
         """网络变化检测（轮询模式）"""
