@@ -162,7 +162,7 @@ class watch_dog(QRunnable):
                 elif self.last_nlm_state == False and nlm_ok:
                     # 网卡恢复（从False变为True）
                     self.signals.print_text.emit(
-                        f"看门狗:网卡已恢复，正在检测网络连通性...[{current_time}]")
+                        f"看门狗:网卡已恢复连接，继续监测中...[{current_time}]")
 
                 self.last_nlm_state = nlm_ok
 
