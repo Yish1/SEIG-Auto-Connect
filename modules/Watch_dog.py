@@ -1,7 +1,7 @@
 import requests
 import time
-import pythoncom
-import win32com.client
+import ctypes
+from ctypes import wintypes
 from PyQt5.QtCore import QRunnable
 
 from modules.State import global_state
@@ -10,25 +10,9 @@ from modules.Working_signals import WorkerSignals
 state = global_state()
 
 class watch_dog(QRunnable):
-    class _NLMEvents:
-        def __init__(self):
-            self._callback = None
-
-        def set_callback(self, callback):
-            self._callback = callback
-
-        def ConnectivityChanged(self, newConnectivity):
-            if self._callback:
-                try:
-                    self._callback()
-                except Exception:
-                    pass
-
     def __init__(self):
         super().__init__()
         self.signals = WorkerSignals()
-        self._nlm = None
-        self._nlm_events = None
         try:
             self.ping_timeout = state.watch_dog_timeout
         except Exception:
@@ -45,9 +29,13 @@ class watch_dog(QRunnable):
         except Exception:
             return False
 
-    def get_net_state(self):
+    def _wininet_net_state(self):
         try:
-            return bool(self._nlm.IsConnectedToInternet)
+            flags = wintypes.DWORD()
+            res = ctypes.windll.wininet.InternetGetConnectedState(
+                ctypes.byref(flags), 0
+            )
+            return bool(res)
         except Exception:
             return None
 
@@ -64,38 +52,26 @@ class watch_dog(QRunnable):
         except Exception:
             pass
 
-        pythoncom.CoInitialize()
+        self.last_net_state = self._wininet_net_state()
+        self.last_health_check_ts = time.time()
+
+        while True:
+            if state.stop_watch_dog:
+                self.signals.print_text.emit("看门狗:停止监测")
+                break
+
+            net_state = self._wininet_net_state()
+            self._handle_net_state_change(net_state)
+            self._periodic_health_check()
+            time.sleep(0.5)
+
+        state.watch_dog_thread_started = False
         try:
-            self._nlm = win32com.client.Dispatch("NetworkListManager")
-            self._nlm_events = win32com.client.WithEvents(
-                self._nlm, self._NLMEvents
-            )
-            self._nlm_events.set_callback(self._on_network_change)
+            self.signals.update_progress.emit(0, 0, 0)
+        except Exception:
+            pass
 
-            self.last_net_state = self.get_net_state()
-            self.last_health_check_ts = time.time()
-
-            while True:
-                if state.stop_watch_dog:
-                    self.signals.print_text.emit("看门狗:停止监测")
-                    break
-                pythoncom.PumpWaitingMessages()
-                self._periodic_health_check()
-                time.sleep(0.2)
-
-        except Exception as e:
-            self.signals.print_text.emit(f"看门狗:监听失败: {e}")
-            
-        finally:
-            pythoncom.CoUninitialize()
-            state.watch_dog_thread_started = False
-            try:
-                self.signals.update_progress.emit(0, 0, 0)
-            except Exception:
-                pass
-
-    def _on_network_change(self):
-        net_state = self.get_net_state()
+    def _handle_net_state_change(self, net_state):
         if net_state is None:
             return
 
