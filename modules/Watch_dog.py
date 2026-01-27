@@ -63,7 +63,7 @@ class watch_dog(QRunnable):
         if self._nlm:
             try:
                 if hasattr(self._nlm, 'IsConnectedToInternet'):
-                    return bool(self._nlm.IsConnectedToInternet)
+                    return bool(self._nlm.IsConnectedToInternet())
                 elif hasattr(self._nlm, 'GetNetworkConnections'):
                     connections = self._nlm.GetNetworkConnections()
                     return connections and connections.Count > 0
@@ -144,7 +144,12 @@ class watch_dog(QRunnable):
         # 只在状态确实变化时处理
         if network_ok != self.last_net_state:
             self.last_net_state = network_ok
-            auth_ok = self.check_auth_layer()
+
+            if network_ok:
+                auth_ok = self.check_auth_layer()
+            else:
+                auth_ok = False
+
             self.handle_connection_change(network_ok, auth_ok)
 
     def _periodic_check(self):
