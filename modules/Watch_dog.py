@@ -1,10 +1,8 @@
-import requests
 import time
 import socket
 import threading
 import pythoncom
 import win32com.client
-import debugpy
 from PyQt5.QtCore import QRunnable
 
 from modules.State import global_state
@@ -19,12 +17,11 @@ class watch_dog(QRunnable):
         self.signals = WorkerSignals()
         self._nlm = None
         self._reconnect_lock = threading.Lock()
-        self.last_net_state = None
-        self.last_auth_state = None
-        self.last_state_change_ts = 0
-        self.state_change_cooldown = 3
-        self.periodic_interval = state.watch_dog_timeout
-        self.last_periodic_check_ts = 0
+        self.last_reconnect_ts = 0  # 上次重连时间
+        self.reconnect_cooldown = 10  # 重连冷却时间（秒）
+        self.nlm_check_count = 0  # NLM检查计数器
+        self.check_interval = 3  # 检查间隔（秒）
+        self.last_nlm_state = None  # 上次NLM状态，用于检测断网
 
     def _init_nlm(self):
         """初始化NetworkListManager"""
@@ -43,7 +40,7 @@ class watch_dog(QRunnable):
                 try:
                     self._nlm = win32com.client.Dispatch(method)
                     # 测试是否可用
-                    if hasattr(self._nlm, 'IsConnectedToInternet') or hasattr(self._nlm, 'GetNetworkConnections'):
+                    if hasattr(self._nlm, 'IsConnected') or hasattr(self._nlm, 'GetNetworkConnections'):
                         return True, method
 
                 except Exception as e:
@@ -55,26 +52,25 @@ class watch_dog(QRunnable):
             self.signals.print_text.emit(f"看门狗:NLM初始化失败: {e}")
             return False, None
 
-    def check_network_layer(self):
-        """检测网络层连通性（网卡是否就绪，不要求互联网连通）"""
+    def check_nlm_connected(self):
+        """检测NLM IsConnected（网卡是否连接到网线）"""
         if state.stop_watch_dog:
             return False
-        # 优先使用NLM
         if self._nlm:
             try:
-                # 使用 IsConnected 而非 IsConnectedToInternet
-                # IsConnected: 网卡连接到任何网络（局域网也算）
-
                 if hasattr(self._nlm, 'IsConnected'):
                     return bool(self._nlm.IsConnected)
-                
                 elif hasattr(self._nlm, 'GetNetworkConnections'):
                     connections = self._nlm.GetNetworkConnections()
                     return connections and connections.Count > 0
             except Exception as e:
                 self.signals.print_text.emit(f"看门狗:NLM查询失败: {e}")
+        return False
 
-        # 最后备选：socket连接测试
+    def check_socket_connected(self):
+        """检测socket连通性（实际网络是否通）"""
+        if state.stop_watch_dog:
+            return False
         try:
             conn = socket.create_connection(("223.5.5.5", 53), timeout=2)
             conn.close()
@@ -82,107 +78,26 @@ class watch_dog(QRunnable):
         except Exception:
             return False
 
-    def check_auth_layer(self):
-        """检测认证层连通性（校园网登录状态）"""
-        if state.stop_watch_dog:
-            return False
-        try:
-            response = requests.head(
-                "http://www.baidu.com", timeout=3, allow_redirects=False, proxies={"http": "", "https": ""})
-            return response.status_code == 200
-
-        except:
-            return False
-
-    def diagnose_connection(self):
-        """诊断连接状态，返回 (网络层状态, 认证层状态)"""
-        if state.stop_watch_dog:
-            return False, False
-        network_ok = self.check_network_layer()
-        auth_ok = False
-
-        if network_ok:
-            auth_ok = self.check_auth_layer()
-
-        return network_ok, auth_ok
-
-    def handle_connection_change(self, network_ok, auth_ok):
-        """处理连接状态变化"""
+    def try_reconnect(self):
+        """尝试重连，有冷却时间"""
         with self._reconnect_lock:
+            now = time.time()
+            if now - self.last_reconnect_ts < self.reconnect_cooldown:
+                return False  # 冷却中
+            
+            self.last_reconnect_ts = now
             current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-
-            if not network_ok:
-                self.signals.print_text.emit(
-                    f"看门狗:网线被拔出(WLAN断开)或网卡被禁用[{current_time}]")
-                self.periodic_interval = 10
-                
-                return  # 网络物理断开时不重连
-
-            if network_ok and not auth_ok:
-                self.signals.print_text.emit(
-                    f"看门狗:检测到认证过期，重新登录...[{current_time}]")
-                try:
-                    self.signals.thread_login.emit()
-                except Exception as e:
-                    self.signals.print_text.emit(f"看门狗:登录失败: {e}")
-
-                if state.connected == False and state.stop_retry_thread == False:
-                    # 增加检查间隔，避免频繁重试，最大不超过600秒
-                    self.periodic_interval = min(
-                        self.periodic_interval + 120, 600)
-
-            elif network_ok and auth_ok:
-                self.signals.print_text.emit(f"看门狗:网络恢复正常[{current_time}]")
-                self.periodic_interval = state.watch_dog_timeout
-
-    def _on_network_change(self):
-        """网络变化检测（轮询模式）"""
-        if state.stop_watch_dog:
-            return
-        now = time.time()
-        if now - self.last_state_change_ts < self.state_change_cooldown:
-            return
-
-        self.last_state_change_ts = now
-        network_ok = self.check_network_layer()
-
-        # 只在状态确实变化时处理
-        if network_ok != self.last_net_state:
-            self.last_net_state = network_ok
-
-            if network_ok:
-                auth_ok = self.check_auth_layer()
-            else:
-                auth_ok = False
-
-            self.handle_connection_change(network_ok, auth_ok)
-
-    def _periodic_check(self):
-        """定期检查"""
-        if state.stop_watch_dog:
-            return
-        now = time.time()
-        if now - self.last_periodic_check_ts < self.periodic_interval:
-            return
-
-        self.last_periodic_check_ts = now
-        network_ok, auth_ok = self.diagnose_connection()
-
-        # 检测网络层从离线恢复到在线的情况
-        if network_ok and self.last_net_state == False:
-            # 网络层刚恢复，更新状态并触发处理
-            current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            self.signals.print_text.emit(f"看门狗:检测到网络层恢复[{current_time}]")
-            self.last_net_state = True
-            self.handle_connection_change(network_ok, auth_ok)
-
-        # 定期检查认证层问题
-        elif network_ok and not auth_ok:
-            self.handle_connection_change(network_ok, auth_ok)
+            self.signals.print_text.emit(f"看门狗:网络断开，尝试重连...[{current_time}]")
+            try:
+                self.signals.thread_login.emit()
+                return True
+            except Exception as e:
+                self.signals.print_text.emit(f"看门狗:登录失败: {e}")
+                return False
 
     def run(self):
         if state.watch_dog_thread_started == True:
-            self.signals.print_text.emit("看门狗:线程已启动无需再次启动")
+            print("看门狗:线程已启动无需再次启动")
             return
 
         state.watch_dog_thread_started = True
@@ -201,24 +116,39 @@ class watch_dog(QRunnable):
         except Exception:
             pass
 
-        # 初始状态检查
-        self.last_net_state, self.last_auth_state = self.diagnose_connection()
-        self.last_periodic_check_ts = time.time()
-
         try:
             while True:
                 if state.stop_watch_dog:
                     self.signals.print_text.emit("看门狗:停止监测")
-                    # debugpy.breakpoint()
                     break
 
-                time.sleep(3)  # 3秒检查一次状态变化
-
-                # 检查状态变化
-                self._on_network_change()
-
-                # 定期完整检查
-                self._periodic_check()
+                time.sleep(self.check_interval)  # 每3秒检查一次
+                
+                # 检查NLM IsConnected
+                nlm_ok = self.check_nlm_connected()
+                self.nlm_check_count += 1
+                
+                # 检测网卡断开事件（从True变为False）
+                if self.last_nlm_state == True and not nlm_ok:
+                    current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                    self.signals.print_text.emit(f"看门狗:网线被拔出(WLAN断开)或网卡被禁用[{current_time}]")
+                
+                self.last_nlm_state = nlm_ok
+                
+                if not nlm_ok:
+                    # 网卡未连接（禁用/网线拔出/WiFi断开），不做任何操作，等待网卡就绪
+                    continue
+                
+                # NLM为True，每检查2次NLM就检查1次socket
+                if self.nlm_check_count % 2 == 0:
+                    socket_ok = self.check_socket_connected()
+                    
+                    if nlm_ok and socket_ok:
+                        # 网络正常，无需操作
+                        pass
+                    elif nlm_ok and not socket_ok:
+                        # NLM通但socket不通，需要重连
+                        self.try_reconnect()
 
         finally:
             if self._nlm:
