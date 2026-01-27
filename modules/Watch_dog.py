@@ -21,7 +21,7 @@ class watch_dog(QRunnable):
         self.last_net_state = None
         self.last_auth_state = None
         self.last_state_change_ts = 0
-        self.state_change_cooldown = 5
+        self.state_change_cooldown = 3
         self.periodic_interval = state.watch_dog_timeout
         self.last_periodic_check_ts = 0
 
@@ -32,8 +32,8 @@ class watch_dog(QRunnable):
             
             # 尝试多种方式初始化NLM
             methods = [
+                "{DCB00C01-570F-4A9B-8D69-199FDBA5723B}", # NetworkListManager CLSID
                 "NetworkListManager",
-                "{DCB00C01-570F-4A9B-8D69-199FDBA5723B}",  # NetworkListManager CLSID
                 "HNetCfg.HNetShare"  # 备选网络API
             ]
             
@@ -66,19 +66,6 @@ class watch_dog(QRunnable):
                     return connections and connections.Count > 0
             except Exception as e:
                 self.signals.print_text.emit(f"看门狗:NLM查询失败: {e}")
-        
-        # 备选：WMI查询
-        try:
-            import wmi
-            c = wmi.WMI()
-            for interface in c.Win32_NetworkAdapter(NetEnabled=True):
-                if interface.NetConnectionStatus == 2:  # Connected
-                    return True
-            return False
-        except ImportError:
-            pass
-        except Exception:
-            pass
         
         # 最后备选：socket连接测试
         try:
@@ -117,7 +104,7 @@ class watch_dog(QRunnable):
             current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
             
             if not network_ok:
-                self.signals.print_text.emit(f"看门狗:检测到网络层断开[{current_time}]")
+                self.signals.print_text.emit(f"看门狗:网线被拔出(WLAN断开)或网卡被禁用[{current_time}]")
                 return  # 网络物理断开时不重连
                 
             if network_ok and not auth_ok:
@@ -129,7 +116,7 @@ class watch_dog(QRunnable):
                     self.periodic_interval += 120  # 增加检查间隔，避免频繁重试
 
             elif network_ok and auth_ok:
-                self.signals.print_text.emit(f"看门狗:检测网络正常")
+                self.signals.print_text.emit(f"看门狗:网络恢复正常[{current_time}]")
 
     def _on_network_change(self):
         """网络变化检测（轮询模式）"""
