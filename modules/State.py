@@ -33,7 +33,7 @@ class global_state:
         self.wlanuserip = None
         self.save_pwd = None
         self.auto_connect = None
-        self.watch_dog_timeout = None
+        self.wtg_timeout = None
         self.login_mode = 0
         self.mulit_login = 1
         self.mulit_info = {}

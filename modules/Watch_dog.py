@@ -22,6 +22,7 @@ class watch_dog(QRunnable):
         self.nlm_check_count = 0  # NLM检查计数器
         self.check_interval = 3  # 检查间隔（秒）
         self.last_nlm_state = None  # 上次NLM状态，用于检测断网
+        self.check_internet_timeout = state.wtg_timeout if state.wtg_timeout else 5  # 互联网连通性检查超时
 
     def _init_nlm(self):
         """初始化NetworkListManager"""
@@ -143,7 +144,7 @@ class watch_dog(QRunnable):
                     continue
                 
                 # NLM为True，每检查2次NLM就检查1次互联网连通性
-                if self.nlm_check_count % 2 == 0:
+                if self.nlm_check_count % self.check_internet_timeout == 0:
                     internet_ok = self.check_internet_connected()
                     
                     if nlm_ok and internet_ok:

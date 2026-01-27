@@ -254,7 +254,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             ('esurfingurl', "0.0.0.0:0", str),
             ('save_pwd', "1", str),
             ('auto_connect', "0", str),
-            ('watch_dog_timeout', 300, int),
+            ('wtg_timeout', 5, int),
             ('mulit_login', 1, int),
             ('login_mode', 0, int),
         ]
