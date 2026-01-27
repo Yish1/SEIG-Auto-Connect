@@ -303,15 +303,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         state.username = self.lineEdit.text()
         state.password = self.lineEdit_2.text()
 
-        if mode != "mulit":
-            # 保存账号密码
-            if self.checkBox.isChecked():
-                encrypted_password = ''.join(
-                    chr(ord(char) + 10) for char in state.password)
-                self.update_config("password", encrypted_password)
-
-            self.update_config("username", state.username)
-
         if mode == "mulit":
             state.username = user
             state.password = pwd
@@ -355,8 +346,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 status = f"登录失败: {data['resultInfo']}"
                 self.update_table(status)
 
-                if data['resultInfo'] == "用户认证失败":
-                    self.update_table("用户名或密码错误，请重新输入！")
+                if data['resultInfo'] == "用户认证失败" or data['resultInfo'] == "密码错误":
+                    state.stop_watch_dog = True
+                    state.connected = True
                     return
 
                 if data['resultInfo'] == "验证码错误":
@@ -396,6 +388,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
                     state.mulit_status = {}
                     if success : self.run_watch_dog()
+
+            else:
+                # 保存账号密码
+                self.save_password()
+                self.update_config("username", state.username)
 
         login_thread = login_Thread()
         login_thread.signals.enable_buttoms.connect(

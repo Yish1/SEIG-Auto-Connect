@@ -45,7 +45,7 @@ class global_state:
         self.watch_dog_thread_started = False
         self.new_version_checked = False
         self.login_thread_finished = False
-        self.mulit_status = {}
+        self.mulit_status = {} 
 
         # 初始化线程池
         self.threadpool = QThreadPool()

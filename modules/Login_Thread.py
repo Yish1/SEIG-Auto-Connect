@@ -69,7 +69,7 @@ class login_Thread(QRunnable):
         except Exception as e:
             self.signals.print_text.emit(f"登录请求失败，请先获取配置并确保配置正确：{e}")
             state.connected = True
-            self.signals.run_settings.emit()
+            # self.signals.run_settings.emit()
 
         state.login_thread_finished = True
 

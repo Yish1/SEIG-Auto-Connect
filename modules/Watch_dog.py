@@ -1,7 +1,10 @@
 import requests
 import time
-import ctypes
-from ctypes import wintypes
+import socket
+import threading
+import pythoncom
+import win32com.client
+import debugpy
 from PyQt5.QtCore import QRunnable
 
 from modules.State import global_state
@@ -13,109 +16,199 @@ class watch_dog(QRunnable):
     def __init__(self):
         super().__init__()
         self.signals = WorkerSignals()
-        try:
-            self.ping_timeout = state.watch_dog_timeout
-        except Exception:
-            self.ping_timeout = 300
+        self._nlm = None
+        self._reconnect_lock = threading.Lock()
         self.last_net_state = None
+        self.last_auth_state = None
         self.last_state_change_ts = 0
         self.state_change_cooldown = 5
-        self.last_health_check_ts = 0
+        self.periodic_interval = state.watch_dog_timeout
+        self.last_periodic_check_ts = 0
 
-    def ping_baidu(self):
+    def _init_nlm(self):
+        """初始化NetworkListManager"""
         try:
-            response = requests.head("http://www.baidu.com", timeout=2)
-            return response.status_code == 200
+            pythoncom.CoInitialize()
+            
+            # 尝试多种方式初始化NLM
+            methods = [
+                "NetworkListManager",
+                "{DCB00C01-570F-4A9B-8D69-199FDBA5723B}",  # NetworkListManager CLSID
+                "HNetCfg.HNetShare"  # 备选网络API
+            ]
+            
+            for method in methods:
+                try:
+                    self._nlm = win32com.client.Dispatch(method)
+                    # 测试是否可用
+                    if hasattr(self._nlm, 'IsConnectedToInternet') or hasattr(self._nlm, 'GetNetworkConnections'):
+                        return True, method
+                    
+                except Exception as e:
+                    continue
+            
+            return False
+        except Exception as e:
+            self.signals.print_text.emit(f"看门狗:NLM初始化失败: {e}")
+            return False
+
+    def check_network_layer(self):
+        """检测网络层连通性"""
+        if state.stop_watch_dog:
+            return False
+        # 优先使用NLM
+        if self._nlm:
+            try:
+                if hasattr(self._nlm, 'IsConnectedToInternet'):
+                    return bool(self._nlm.IsConnectedToInternet)
+                elif hasattr(self._nlm, 'GetNetworkConnections'):
+                    connections = self._nlm.GetNetworkConnections()
+                    return connections and connections.Count > 0
+            except Exception as e:
+                self.signals.print_text.emit(f"看门狗:NLM查询失败: {e}")
+        
+        # 备选：WMI查询
+        try:
+            import wmi
+            c = wmi.WMI()
+            for interface in c.Win32_NetworkAdapter(NetEnabled=True):
+                if interface.NetConnectionStatus == 2:  # Connected
+                    return True
+            return False
+        except ImportError:
+            pass
+        except Exception:
+            pass
+        
+        # 最后备选：socket连接测试
+        try:
+            conn = socket.create_connection(("8.8.8.8", 53), timeout=2)
+            conn.close()
+            return True
         except Exception:
             return False
 
-    def _wininet_net_state(self):
+    def check_auth_layer(self):
+        """检测认证层连通性（校园网登录状态）"""
+        if state.stop_watch_dog:
+            return False
         try:
-            flags = wintypes.DWORD()
-            res = ctypes.windll.wininet.InternetGetConnectedState(
-                ctypes.byref(flags), 0
-            )
-            return bool(res)
-        except Exception:
-            return None
+            response = requests.head("http://www.baidu.com", timeout=3)
+            return response.status_code == 200
+
+        except:
+            return False
+
+    def diagnose_connection(self):
+        """诊断连接状态，返回 (网络层状态, 认证层状态)"""
+        if state.stop_watch_dog:
+            return False, False
+        network_ok = self.check_network_layer()
+        auth_ok = False
+        
+        if network_ok:
+            auth_ok = self.check_auth_layer()
+            
+        return network_ok, auth_ok
+
+    def handle_connection_change(self, network_ok, auth_ok):
+        """处理连接状态变化"""
+        with self._reconnect_lock:
+            current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            
+            if not network_ok:
+                self.signals.print_text.emit(f"看门狗:检测到网络层断开[{current_time}]")
+                return  # 网络物理断开时不重连
+                
+            if network_ok and not auth_ok:
+                self.signals.print_text.emit(f"看门狗:检测到认证过期，重新登录...[{current_time}]")
+                try:
+                    self.signals.thread_login.emit()
+                except Exception as e:
+                    self.signals.print_text.emit(f"看门狗:登录失败: {e}")
+                    self.periodic_interval += 120  # 增加检查间隔，避免频繁重试
+
+            elif network_ok and auth_ok:
+                self.signals.print_text.emit(f"看门狗:检测网络正常")
+
+    def _on_network_change(self):
+        """网络变化检测（轮询模式）"""
+        if state.stop_watch_dog:
+            return
+        now = time.time()
+        if now - self.last_state_change_ts < self.state_change_cooldown:
+            return
+            
+        self.last_state_change_ts = now
+        network_ok = self.check_network_layer()
+        
+        # 只在状态确实变化时处理
+        if network_ok != self.last_net_state:
+            self.last_net_state = network_ok
+            self.handle_connection_change(network_ok, auth_ok=True)
+
+    def _periodic_check(self):
+        """定期检查"""
+        if state.stop_watch_dog:
+            return
+        now = time.time()
+        if now - self.last_periodic_check_ts < self.periodic_interval:
+            return
+            
+        self.last_periodic_check_ts = now
+        network_ok, auth_ok = self.diagnose_connection()
+        
+        # 定期检查只关心认证层问题
+        if network_ok and not auth_ok:
+            self.handle_connection_change(network_ok, auth_ok)
 
     def run(self):
-        # debugpy.breakpoint()
         if state.watch_dog_thread_started == True:
             self.signals.print_text.emit("看门狗:线程已启动无需再次启动")
             return
 
         state.watch_dog_thread_started = True
-        self.signals.print_text.emit("看门狗:正在实时监测网络状态...")
+        
+        # 尝试初始化NLM
+        nlm_available, method = self._init_nlm()
+        if nlm_available:
+            self.signals.print_text.emit(f"看门狗:正在持续监测网络状态...             (By:{method})")
+        else:
+            self.signals.print_text.emit("看门狗:正在持续监测网络状态...              (By:Socket Test)")
+        
         try:
             self.signals.update_progress.emit(1, 0, 0)
         except Exception:
             pass
 
-        self.last_net_state = self._wininet_net_state()
-        self.last_health_check_ts = time.time()
+        # 初始状态检查
+        self.last_net_state, self.last_auth_state = self.diagnose_connection()
+        self.last_periodic_check_ts = time.time()
 
-        while True:
-            if state.stop_watch_dog:
-                self.signals.print_text.emit("看门狗:停止监测")
-                break
-
-            net_state = self._wininet_net_state()
-            self._handle_net_state_change(net_state)
-            self._periodic_health_check()
-            time.sleep(0.5)
-
-        state.watch_dog_thread_started = False
         try:
-            self.signals.update_progress.emit(0, 0, 0)
-        except Exception:
-            pass
+            while True:
+                if state.stop_watch_dog:
+                    self.signals.print_text.emit("看门狗:停止监测")
+                    # debugpy.breakpoint()
+                    break
+                    
+                time.sleep(3)  # 3秒检查一次状态变化
+                
+                # 检查状态变化
+                self._on_network_change()
+                
+                # 定期完整检查
+                self._periodic_check()
 
-    def _handle_net_state_change(self, net_state):
-        if net_state is None:
-            return
-
-        if net_state == self.last_net_state:
-            return
-
-        now = time.time()
-        self.last_net_state = net_state
-        if now - self.last_state_change_ts < self.state_change_cooldown:
-            return
-
-        self.last_state_change_ts = now
-
-        if net_state:
-            self.signals.print_text.emit("看门狗:网络变化(恢复)，立即检测连通性...")
-            if self.ping_baidu():
-                self.signals.print_text.emit("看门狗:网络正常无需操作")
-            else:
-                self.signals.print_text.emit("看门狗:网络异常，持续检测中...")
-            return
-
-        self.signals.print_text.emit("看门狗:网络变化(断开)，立即检测连通性...")
-        if not self.ping_baidu():
-            current_time = time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime())
-            self.signals.print_text.emit(
-                f"看门狗:网络断开，重新登录...[{current_time}]")
+        finally:
+            if self._nlm:
+                try:
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    pass
+            
+            state.watch_dog_thread_started = False
             try:
-                self.signals.thread_login.emit()
-            except Exception as e:
-                self.signals.print_text.emit(f"看门狗:登录失败: {e}")
-
-    def _periodic_health_check(self):
-        now = time.time()
-        if now - self.last_health_check_ts < self.ping_timeout:
-            return
-
-        self.last_health_check_ts = now
-        if not self.ping_baidu():
-            current_time = time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime())
-            self.signals.print_text.emit(
-                f"看门狗:网络异常(账号可能下线)，重新登录...[{current_time}]")
-            try:
-                self.signals.thread_login.emit()
-            except Exception as e:
-                self.signals.print_text.emit(f"看门狗:登录失败: {e}")
+                self.signals.update_progress.emit(0, 0, 0)
+            except Exception:
+                pass
